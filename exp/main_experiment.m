@@ -15,7 +15,7 @@ close all; clear; clc;
 tic;    % Start stopwatch timer
 
 % Initialise paths
-cd ~/projects/2022-MScGeiger/experiment/;
+cd ~/projects/2022-MScGeiger/MSc_EventDuration/exp/;
 addpath(genpath('.'));
 addpath(genpath('/usr/share/psychtoolbox-3/'));
 

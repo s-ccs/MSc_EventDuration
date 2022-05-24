@@ -5,7 +5,7 @@ ListenChar(0) % in case KbChar was used before, we deactivate it here
 
 keyList = zeros(1,256);
 keyList(cfg.keys) = 1;
-KbQueueCreate(14, keyList); % Create queue
+KbQueueCreate(cfg.ix_responseDevice, keyList); % Create queue
 %KbQueueCreate(11, keyList);                                                % ??? works as well for keyboard
 %KbQueueCreate(14, keyList);                                                % ??? doesn't work for response box
 %KbQueueCreate(21, keyList);                                                % ??? doesn't work for other keyboard

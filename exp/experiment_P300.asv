@@ -37,7 +37,6 @@ params = cfg.P300;
 % Set up queue for recording button presses
 % XXX Check if KB Queue works with timestamps
 setup_kbqueue(cfg);
-responses = [];
 
 %--------------------------------------------------------------------------
 ntrials = length(randomization_block.trial);
@@ -90,6 +89,11 @@ ntrials = length(randomization_block.trial);
 %--------------------------------------------------------------------------
 %% MAIN TRIAL LOOP
 
+% Preallocation
+responses = [];
+stimtimings = [];
+expectedtimings = [];
+
 % Begin presenting stimuli
 draw_fixationdot(cfg,params.dotSize) % Start with fixation cross
 startTime = Screen('Flip',cfg.win); % Store time at which experiment started
@@ -112,7 +116,7 @@ for trialNum = 1:ntrials
     % expectedTime = 0;
     expectedTime_start = expectedTime;
     expectedtimings(1,trialNum) = expectedTime;
-    drawingtime = 2*cfg.halfifi;
+    drawingtime = 2*cfg.halfifi;                                            % ??? Wofür?
     
     % Show the stimulus
     Screen('FillRect',cfg.win,cfg.background);
@@ -151,9 +155,7 @@ for trialNum = 1:ntrials
         end
     end
     
-    % How long should the stimulus be on?
-    % Empty Queue - otherwise responses during ITI would result in skip of
-    % stimulus
+    % How long should the stimulus be on?----------------------------------
     KbQueueFlush(cfg.ix_responseDevice,2);
     % Either as long as maximally specified (cfg.P300.stimulusDuration)...
     expectedTime = expectedTime + cfg.P300.stimulusDuration;
@@ -168,6 +170,7 @@ for trialNum = 1:ntrials
             t1 = GetSecs;
         end
     end
+    % --------------------------------------------------------------------
     
     % Flip for ITI
     stimOffset = Screen('Flip', cfg.win, startTime + expectedTime - cfg.halfifi,1)- startTime;
@@ -179,26 +182,6 @@ for trialNum = 1:ntrials
     stimtimings(1,trialNum) = stimOnset;
     stimtimings(2,trialNum) = stimOffset;
     expectedtimings(2,trialNum) = expectedTime;
-    
-    % Read out button presses after last reponse
-    if trialNum==ntrials
-        while true
-            if ~KbEventAvail(cfg.ix_responseDevice)
-                break
-            end
-            evt = KbEventGet(cfg.ix_responseDevice);
-            if evt.Pressed==1 % don't record key releases
-                add_log_entry('buttonpress',evt.Time-startTime,cfg,fLog,randomization_block,trialNum);
-                evt.blockNumber = trialNum;
-                evt.TimeMinusStart = evt.Time - startTime;
-                % evt.trialDistractor_stimulus = trialDistractor_stimulus{blockNum};
-                % evt.trialDistractor_dot = trialDistractor_dot{blockNum};
-                evt.subject = randomization_block.subject(1);
-                evt.block = randomization_block.block(1);
-                responses = [responses evt];
-            end
-        end
-    end
 
     % Safe quit mechanism (hold q to quit)
     [keyPr,~,key,~] = KbCheck;

@@ -7,7 +7,7 @@
 % 21: logitech g213 keyboard
 
 while (1)
-    [keyIsDown, keyTime, keyCode] = KbCheck(14);
+    [keyIsDown, keyTime, keyCode] = KbCheck(11);
    if (keyIsDown), break, end
 end
     disp(find(keyCode));

@@ -4,14 +4,14 @@ assert(isstruct(cfg));
 
 % Response box
 KbName('UnifyKeyNames') % switch to MacOS-X naming scheme (universal thus portable)
-cfg.keys = [11 12]; % response box [lt rt]
-% cfg.keys = [11 12 13 14 37]; % response box [lt rt lb rb mt]
+cfg.keys = [11 12]; % response box [lt rt lb rb mt]
+
 
 %% P300
 
 cfg.P300 = struct();
-cfg.P300.numBlocks = 5;             % Number of blocks
-cfg.P300.numTrials = 60;            % Number of trials in a block
+cfg.P300.numBlocks = 1;             % Number of blocks
+cfg.P300.numTrials = 10;            % Number of trials in a block
 cfg.P300.symbols = ['A','B','C','D','E'];
 cfg.P300.stimSize = 100;             % Diameter in degrees
 cfg.P300.distractorColor = [0,0,0];

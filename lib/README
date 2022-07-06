@@ -1,0 +1,6 @@
+For the stimulus duration experiment we use images from the Chicago Face Database:
+
+Ma, D.S., Correll, J. & Wittenbrink, B. The Chicago face database: A free stimulus set of faces and norming data. Behav Res 47, 1122–1135 (2015). https://doi.org/10.3758/s13428-014-0532-5
+
+We subset the database to neutral faces (n=597) with uniformly white background (n=526).
+Images that were removed due to a non-white background are listed in 'removedImages.tsv'.

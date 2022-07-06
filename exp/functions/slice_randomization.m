@@ -6,6 +6,5 @@ select = rand.block == block & rand.subject == subject;
 if sum(select)==0
     error('something went wrong, empty randomization selection')
 end
-
 slice = rand(select,:);
 end

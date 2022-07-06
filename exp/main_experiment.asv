@@ -1,151 +1,190 @@
-%% Main Experimental script
+%% Main experimental script
 % MScThesis by Martin Geiger in 2022
-% 2 Experiments: P300 & stimDur(Stimulus Duration)
+% 2 Experiments: P300 & stimDur (= stimulus duration)
 
-
-% Comments:
-% XXX ToDo by Bene
-% YYY ToDo by myself
-% ? Question for myself
-% ??? Question for René or Bene
-
-% Run through experiment.
-%--------------------------------------------------------------------------
-close all; clear; clc;
-tic;    % Start stopwatch timer
+%% Setup
+close all; clear all; clc;
+tic; % Start stopwatch timer
 
 % Initialise paths
 cd ~/projects/2022-MScGeiger/MSc_EventDuration/exp/;
 addpath(genpath('.'));
 addpath(genpath('/usr/share/psychtoolbox-3/'));
+cfg = struct(); % Initialise cfg
 
 % Setup Lsl
 addpath(genpath('/home/stimulus/projects/2021-timingTest/EEG-trigger-check/lib/liblsl-Matlab/'));
 disp('Loading library...');
 lib = lsl_loadlib();
 info = lsl_streaminfo(lib,'LSL_Markers_Matlab','Markers',1,0,'cf_string','myuniquesourceid23444');
-cfg = struct();
 cfg.outlet = lsl_outlet(info);
 
-cfg.do_P300    = 1; % if 0 = false, if 1 = true
-cfg.do_stimDur = 0;
-cfg.debug = 1; % Check debugmode
-cfg.use_lsl = 1;
-cfg.computer_environment = 'stimPC';
+% Setup parallelport (LPT)
+delete(instrfindall) % closes all serial connects
+cfg.s = serial('/dev/ttyACM0','BaudRate', 1000000, 'DataBits', 8);
+% Open port for communication
+fopen(cfg.s);
+fprintf(cfg.s,"SET DATA_MODE WRITE\n");
 
+% Check which experiment(s) to run, in debug mode or with participant,
+% ger or eng instructions, use LSL or not
+% 1 = true --> do
+% 0 = false --> don't do
+cfg.do_P300    = 1;
+cfg.do_stimDur = 0;
+cfg.gerInst    = 0; % germanInstructions
+cfg.engInst    = 1; % englishInstructions
+cfg.debug      = 1;
+cfg.use_lsl    = 1; % lsl markers
+cfg.use_lpt    = 1; % eegoSports markers
+
+% Setup parameters
 fprintf('Setting up parameters \n')
 cfg = setup_parameters(cfg);
 
 %% Debug
-
 if cfg.debug
     input('!!!DEBUGMODE ACTIVATED!!! - continue with enter')
-    %
-    sca;  % to close psychtoolbox overlay
-    Screen('Preference', 'SkipSyncTests', 1)
+    Screen('Preference', 'SkipSyncTests', 2)
     PsychDebugWindowConfiguration;
 end
 
 %% Subject ID
-
 if cfg.debug
     SID = 99;
 else
-    SID = input('Enter subject ID:');   % asks for manual input of SID
+    SID = input('Enter subject ID:'); % Ask for manual input of SID
 end
-assert(isnumeric(SID))
+assert(isnumeric(SID));
 
-%% Randomization
-
-randomization = struct();
-try
-    for task = {'P300','stimDur'}
-        cfg.(task{1}).randomization_filepath = fullfile('../..','results',sprintf('subj-%03i',SID),'ses-01','beh',sprintf('sub-%03i_task-%s_randomization.tsv',SID,task{1}));
-        cfg.(task{1}).behavioral_filepath = fullfile('../..','results',sprintf('subj-%03i',SID),'ses-01','beh',sprintf('sub-%03i_task-%s_events.mat',SID,task{1}));
-    end
-
-    if cfg.debug
-        % force randomization regen
-        error
-    end
-    tmp = readtable(sprintf('randomizations/sub-%03i_task-P300_randomization.tsv',SID));
-    randomization.P300 = tmp.randomization;
-    %tmp = load(sprintf('randomizations/sub-%03i_task-stimDur_randomization.mat',SID));
-    % fill XXX randomization.stimDur
-    fprintf('Loading Randomization from disk\n')
-    
-catch
-    fprintf('Generating Randomization\n')
-    randomization.P300 = setup_randomization_generate(cfg,SID,'P300',cfg.P300.numBlocks,cfg.P300.numTrials);
-    %randomization.stimDur = setup_randomization_generate(cfg,SID,'stimDur',cfg.stimDur.numBlocks,cfg.stimDur.numTrials);
-    
-end
-
-%% Setup Screen
-
-whichScreen = max(Screen('Screens')); % Screen ID: 0=WQHD, 1=390Hz
+%% Setup screen
+cfg.whichScreen = max(Screen('Screens')); % Screen ID: 0=WQHD, 1=390Hz
 if cfg.debug
-    whichScreen = 0;
+    cfg.whichScreen = 0;
 end
 fprintf('Starting Screen\n')
-cfg = setup_window(cfg,whichScreen); % opens psychtoolbox on specified screen
+cfg = setup_window(cfg,cfg.whichScreen); % Opens psychtoolbox on specified screen
+
+% Draw 'Loading task...' so participants don't get confused if it takes some time
+Screen('TextSize',cfg.win,50);             % Set text size
+Screen('FillRect',cfg.win,cfg.background); % Set background color
+if cfg.engInst
+    DrawFormattedText2(['Loading task...'],'win',cfg.win,'sx','center','sy','center','xalign','center','yalign','center','xlayout','center');
+elseif cfg.gerInst
+    DrawFormattedText2(['Lade Experiment...'],'win',cfg.win,'sx','center','sy','center','xalign','center','yalign','center','xlayout','center');
+end
+Screen('Flip',cfg.win);
+
+%% Load face stimuli for stimDur experiment
+if cfg.do_stimDur
+    cfg = setup_stimuli(cfg);
+end
+
+%% Randomization
+randomization = struct();
+try
+    % Declare paths where to save data
+    if cfg.do_P300
+        task = {'P300'};
+    elseif cfg.do_stimDur
+        task = {'stimDur'};
+    end
+    cfg.(task{1}).randomization_filepath = fullfile('..','results',sprintf('subj-%03i',SID),'ses-01','beh',sprintf('sub-%03i_task-%s_randomization.tsv',SID,task{1}));
+    cfg.(task{1}).behavioral_filepath_mat = fullfile('..','results',sprintf('subj-%03i',SID),'ses-01','beh',sprintf('sub-%03i_task-%s_events.mat',SID,task{1}));
+    cfg.(task{1}).behavioral_filepath_tsv = fullfile('..','results',sprintf('subj-%03i',SID),'ses-01','beh',sprintf('sub-%03i_task-%s_events.tsv',SID,task{1}));
+
+    if cfg.debug
+        error % force randomization regen
+    end
+
+    % Load randomization
+    randomization.(task{1}) = struct2table(tdfread(fullfile('..','results',sprintf('subj-%03i',SID),'ses-01','beh',sprintf('sub-%03i_task-%s_randomization.tsv',SID,task{1}))));
+    if cfg.do_P300
+        randomization.P300.condition = cellstr(randomization.P300.condition);
+        randomization.P300.targetResponse = cellstr(randomization.P300.targetResponse);
+    end
+    randomization.(task{1}).task = cellstr(randomization.(task{1}).task);
+    fprintf('Loading Randomization from disk\n')
+
+catch
+    % Generate randomization
+    fprintf('Generating Randomization\n')
+    if cfg.do_P300
+        randomization.P300 = setup_randomization_generate(cfg,SID,'P300',cfg.P300.numBlocks,cfg.P300.numTrials);
+    elseif cfg.do_stimDur
+        randomization.stimDur = setup_randomization_generate(cfg,SID,'stimDur',cfg.stimDur.numBlocks,cfg.stimDur.numTrials);
+    end
+end
 
 %% Do P300 Task
-
 if cfg.do_P300
     fprintf('Starting with P300 Task \n')
     numBlocks = cfg.P300.numBlocks;
-    for curBlock = 1:numBlocks % is a sorted list of runs
-        fprintf('Block %i from %i \n',curBlock,numBlocks)
-        fprintf('Drawing subject instructions \n')
-        
-        DrawFormattedText(cfg.win, 'Starting P300 task ...', 'center', 'center');
-        fprintf('Starting experiment_adaptation \n')
-        
+    for curBlock = 1:numBlocks
+        % Run block
         experiment_P300(cfg,slice_randomization(randomization.P300,SID,curBlock));
-        
-        
+        % Between blocks: draw number of next block
         if curBlock < max(numBlocks)
-            text = ['Moving on to run ', num2str(curBlock+1), ' of ', num2str(max(numBlocks)), '...'];
-            DrawFormattedText(cfg.win, text, 'center', 'center');
+            if cfg.engInst
+                text = ['Moving on to block ', num2str(curBlock+1),' of ', num2str(max(numBlocks)),'...'];
+            elseif cfg.gerInst
+                text = ['Gehe zu Block ', num2str(curBlock+1),' von ', num2str(max(numBlocks)),'...'];
+            end
+            DrawFormattedText(cfg.win,text,'center','center');
             Screen('Flip',cfg.win);
-            waitQKey(cfg)
+            % Option to quit experiment between blocks
+            stopExec = waitQKey(cfg);
+            if stopExec
+                return
+            end
         end
-        toc
     end
-    
 end
 
 %% Do StimDur Task
-
 if cfg.do_stimDur
     fprintf('Starting with stimDur Task \n')
     numBlocks = cfg.stimDur.numBlocks;
-    for curBlock = numBlocks % is a sorted list of runs
-        fprintf('Run %i from %i \n',curBlock,length(numBlocks))
-        fprintf('Drawing subject instructions \n')
-        
-        DrawFormattedText(cfg.win, 'Moving on to main task ...', 'center', 'center');
-        
-        fprintf('Starting experiment_adaptation \n')
-        experiment_stimDur(cfg,slice_randomization(randomization,SID,curBlock));
-        
+    for curBlock = 1:numBlocks
+        % Run block
+        experiment_stimDur(cfg,slice_randomization(randomization.stimDur,SID,curBlock));
+        % Between blocks: draw number of next block
         if curBlock < max(numBlocks)
-            text = ['Moving on to run ', num2str(curBlock+1), ' of ', num2str(max(numBlocks)), '...'];
-            DrawFormattedText(cfg.win, text, 'center', 'center');
+            if cfg.engInst
+                text = ['Moving on to block ',num2str(curBlock+1),' of ',num2str(max(numBlocks)),'...'];
+            elseif cfg.gerInst
+                text = ['Gehe zu Block ',num2str(curBlock+1),' von ',num2str(max(numBlocks)),'...'];
+            end
+            DrawFormattedText(cfg.win, text,'center','center');
             Screen('Flip',cfg.win);
-            waitQKey(cfg)
-            
+            % Option to quit experiment between blocks
+            stopExec = waitQKey(cfg);
+            if stopExec
+                return
+            end
         end
-        if cfg.writtenCommunication
-            communicateWithSubject(cfg.win,'',200,200,cfg.Lmin_rgb,cfg.background);
-        end
-        toc
     end
-    
 end
 
-%% -----------------------------------------------------------------
-% call function to close window and clean up
-toc
+%% End experiment
+% Draw 'Task finished' as information for subject
+Screen('TextSize',cfg.win,50);
+Screen('FillRect',cfg.win,cfg.background);
+if cfg.engInst
+    DrawFormattedText2(['Task finished.\n\nWait for experimenter.'],'win',cfg.win,'sx','center','sy','center','xalign','center','yalign','center','xlayout','center');
+elseif cfg.gerInst
+    DrawFormattedText2(['Aufgabe beendet.\n\nWarte auf Versuchsleiter.'],'win',cfg.win,'sx','center','sy','center','xalign','center','yalign','center','xlayout','center');
+end
+Screen('Flip',cfg.win);
+WaitSecs(3);
+
+% Close window and lsl stream
 safeQuit(cfg);
+
+toc; % Stop stopwatch timer
+
+% Get a green script :)
+%#ok<*CLALL>
+%#ok<*NBRAK>
+%#ok<*LTARG>
+%#ok<*SERIAL>

@@ -40,10 +40,10 @@ Screen('TextFont',cfg.win,char('Roboto Mono')); % Set stimulus font
 for trialNum = 1:length(randomization_block.trial)
     % Current stimulus to be displayed
     currStim = cfg.P300.symbols(randomization_block.stimulus(trialNum));
-    
+
     % Save timings
     expectedtimings(trialNum,1) = expectedTime;
-    
+
     % Draw background and fixation dot
     Screen('FillRect',cfg.win,cfg.background);
     draw_fixationdot(cfg,cfg.P300.dotSize)
@@ -54,32 +54,14 @@ for trialNum = 1:length(randomization_block.trial)
     else
         DrawFormattedText2(currStim,'win',cfg.win,'sx','center','sy','center','xalign','center','yalign','center','xlayout','center','transform',{'translate',[4 0]});
     end
-    
+
     % Show the stimulus
     stimOnset = Screen('Flip',cfg.win,startTime+expectedTime-cfg.halfifi,1)-startTime;
     send_trigger('stimOnset',stimOnset,cfg); % Send lsl trigger for stimOnset
-    
-    % Read out all the button presses
-    while true
-        if ~KbEventAvail(cfg.ix_responseDevice)
-            break
-        end
-        evt = KbEventGet(cfg.ix_responseDevice);
-        if evt.Pressed==1 && trialNum ~= 1 % don't record key releases and prevent indexing error (if response to first stimulus of block for whatever reason is <~10 ms)
-            send_trigger('buttonpress',evt.Time-startTime,cfg); % Send lsl trigger for response
-            evt.TimeMinusStart = evt.Time-startTime;
-            evt.subject = randomization_block.subject(1);
-            evt.block = randomization_block.block(1);
-            evt.trialNumber = trialNum-1;
-            evt.stimulus = cfg.P300.symbols(randomization_block.stimulus(trialNum-1));
-            evt.condition = randomization_block.condition(trialNum-1);
-            responses = [responses evt];
-        end
-    end
-    
+
     % How long should the stimulus be on?
     expectedTime = expectedTime + cfg.P300.stimulusDuration;
-    
+
     % ITI:
     % Draw a gray background on top of the stimulus
     Screen('FillRect',cfg.win,cfg.background);
@@ -87,41 +69,53 @@ for trialNum = 1:length(randomization_block.trial)
     draw_fixationdot(cfg,cfg.P300.dotSize)
     stimOffset = Screen('Flip',cfg.win,startTime+expectedTime-cfg.halfifi,1)-startTime;
     send_trigger('stimOffset',stimOffset,cfg) % Send lsl trigger for stimOffset
+    a = GetSecs();
     % Length of ITI
     expectedTime = expectedTime + randomization_block.ITI(trialNum);
-    
-    % Read out response to last stimulus of block
+
+    % Leave time to read out response to last stimulus of block
     if trialNum == length(randomization_block.trial)
         WaitSecs(randomization_block.ITI(trialNum));
+    end
+
+    % Read out button presses
+    b = 0;
+    while (b-a) < (randomization_block.ITI(trialNum)-0.01)
+        while true
+            if ~KbEventAvail(cfg.ix_responseDevice)
+                break
+            end
+            evt = KbEventGet(cfg.ix_responseDevice);
+            if evt.Pressed==1 % Don't record key releases
+                send_trigger('buttonpress',evt.Time-startTime,cfg); % Send lsl trigger for response
+                evt.TimeMinusStart = evt.Time-startTime;
+                evt.subject = randomization_block.subject(1);
+                evt.block = randomization_block.block(1);
+                evt.trialNumber = trialNum;
+                evt.stimulus = cfg.P300.symbols(randomization_block.stimulus(trialNum));
+                evt.condition = randomization_block.condition(trialNum);
+                responses = [responses evt];
+            end
+
+        end
+        b = GetSecs();
+    end
+
+    % Send lsl trigger for block end
+    if trialNum == length(randomization_block.trial)
         Screen('FillRect',cfg.win,cfg.background);
         endBlock = Screen('Flip',cfg.win,startTime+expectedTime-cfg.halfifi,1)-startTime;
-        send_trigger('blockEnd',endBlock,cfg); % Send lsl trigger for block end
+        send_trigger('blockEnd',endBlock,cfg);
         blockOnOff(2) = endBlock; % Store time at which blocks end
     end
-    while true
-        if ~KbEventAvail(cfg.ix_responseDevice)
-            break
-        end
-        evt = KbEventGet(cfg.ix_responseDevice);
-        if evt.Pressed==1 % Don't record key releases
-            send_trigger('buttonpress',evt.Time-startTime,cfg);
-            evt.TimeMinusStart = evt.Time-startTime;
-            evt.subject = randomization_block.subject(1);
-            evt.block = randomization_block.block(1);
-            evt.trialNumber = trialNum;
-            evt.stimulus = cfg.P300.symbols(randomization_block.stimulus(trialNum));
-            evt.condition = randomization_block.condition(trialNum);
-            responses = [responses evt];
-        end
-    end
-    
+
     % Save timings and further relevant information
     stimtimings(trialNum,1) = stimOnset;
     stimtimings(trialNum,2) = stimOffset;
     expectedtimings(trialNum,2) = expectedTime;
     stimtimings(trialNum,3) = trialNum;
     stimtimings(trialNum,4) = randomization_block.block(trialNum);
-    
+
     % Safe quit mechanism (hold q to quit)
     [keyPr,~,key,~] = KbCheck;
     key = find(key);
@@ -148,7 +142,6 @@ assignin('base','responses',responses);
 % Save results
 save_events(outFile,responses,randomization_block,cfg,stimtimings,expectedtimings,blockOnOff);
 
-% Get a green script =)
 %#ok<*AGROW>
 %#ok<*NBRAK>
 end

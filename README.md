@@ -1,3 +1,4 @@
 # MSc_EventDuration
-# 2022-05-05
-# Master thesis on overlap & event durations by Martin
+
+Master thesis on overlap & event durations by Martin
+start: 2022-05

@@ -40,7 +40,7 @@ addpath('../lib');
 %% Load face images
 
 % Get a list of files in the subset folder
-fileList = dir('../lib/CFD_subset/*N.jpg');
+fileList = dir('../../CFD_subset/*N.jpg');
 for k = 1 : length(fileList)
     % Load image
     image = imread(fullfile(fileList(k).folder, fileList(k).name));

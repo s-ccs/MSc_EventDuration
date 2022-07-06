@@ -34,7 +34,7 @@ cfg.do_P300    = 1;
 cfg.do_stimDur = 0;
 cfg.engInst    = 1; % English instructions
 cfg.gerInst    = 0; % German instructions
-cfg.debug      = 1;
+cfg.debug      = 0;
 cfg.use_lsl    = 1; % lsl markers
 cfg.use_lpt    = 1; % eegoSports markers
 
@@ -89,16 +89,16 @@ try
     elseif cfg.do_stimDur
         task = {'stimDur'};
     end
-    cfg.(task{1}).randomization_filepath = fullfile('..','data',sprintf('subj-%03i',SID),'ses-01','beh',sprintf('sub-%03i_task-%s_randomization.tsv',SID,task{1}));
-    cfg.(task{1}).behavioral_filepath_mat = fullfile('..','data',sprintf('subj-%03i',SID),'ses-01','beh',sprintf('sub-%03i_task-%s_events.mat',SID,task{1}));
-    cfg.(task{1}).behavioral_filepath_tsv = fullfile('..','data',sprintf('subj-%03i',SID),'ses-01','beh',sprintf('sub-%03i_task-%s_events.tsv',SID,task{1}));
+    cfg.(task{1}).randomization_filepath = fullfile('../..','data',sprintf('subj-%03i',SID),'ses-01','beh',sprintf('sub-%03i_task-%s_randomization.tsv',SID,task{1}));
+    cfg.(task{1}).behavioral_filepath_mat = fullfile('../..','data',sprintf('subj-%03i',SID),'ses-01','beh',sprintf('sub-%03i_task-%s_events.mat',SID,task{1}));
+    cfg.(task{1}).behavioral_filepath_tsv = fullfile('../..','data',sprintf('subj-%03i',SID),'ses-01','beh',sprintf('sub-%03i_task-%s_events.tsv',SID,task{1}));
 
     if cfg.debug
         error % force randomization regen
     end
 
     % Load randomization
-    randomization.(task{1}) = struct2table(tdfread(fullfile('..','data',sprintf('subj-%03i',SID),'ses-01','beh',sprintf('sub-%03i_task-%s_randomization.tsv',SID,task{1}))));
+    randomization.(task{1}) = struct2table(tdfread(fullfile('../..','data',sprintf('subj-%03i',SID),'ses-01','beh',sprintf('sub-%03i_task-%s_randomization.tsv',SID,task{1}))));
     if cfg.do_P300
         randomization.P300.condition = cellstr(randomization.P300.condition);
         randomization.P300.targetResponse = cellstr(randomization.P300.targetResponse);

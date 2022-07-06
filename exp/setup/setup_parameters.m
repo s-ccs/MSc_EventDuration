@@ -4,7 +4,7 @@ assert(isstruct(cfg));
 % Button box
 KbName('UnifyKeyNames')      % Switch to MacOS-X naming scheme (universal thus portable)
 cfg.keys = [11 12 13 14 37]; % Button box keycodes [lt rt lb rb mt]
-cfg.ix_responseDevice = 12;  % Index of button box
+cfg.ix_responseDevice = 14;  % Index of button box
 
 % Screen environment
 cfg.computer_environment = 'stimPC';

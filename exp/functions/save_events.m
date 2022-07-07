@@ -240,6 +240,7 @@ elseif cfg.do_stimDur
         if reactionTime == timeResponse
             reactionTime = NaN;
         end
+        % Only even numbered blocks have ITIs
         if mod(randomization_block.block(1),2)==0
             safe.ITI        = [safe.ITI            {'NaN'}];
         elseif mod(randomization_block.block(1),2)~=0
@@ -257,7 +258,6 @@ elseif cfg.do_stimDur
         safe.block          = [safe.block          getfield(responses,{responseNum},'block')];
         safe.subject        = [safe.subject        randomization_block.subject(trialNum)];
     end
-    
 end
 
 % Add entries for block start and end

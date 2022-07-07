@@ -48,23 +48,6 @@ for trialNum = 1:ntrials
     draw_fixationdot(cfg,cfg.stimDur.dotSize); % Draw fixation dot
     stimOnset = Screen('Flip',cfg.win,startTime+expectedTime-cfg.halfifi,1)-startTime;
     send_trigger('stimOnset',stimOnset,cfg); % Send lsl trigger for stimOnset
-
-    % Read out all the button presses
-    while true
-        if ~KbEventAvail(cfg.ix_responseDevice)
-            break
-        end
-        evt = KbEventGet(cfg.ix_responseDevice);
-        if evt.Pressed==1 && trialNum ~= 1 % don't record key releases && prevent indexing error (if response to first stimulus of block for whatever reason is <~10 ms)
-            send_trigger('buttonpress',evt.Time-startTime,cfg); % Send LSL trigger for response
-            evt.TimeMinusStart = evt.Time-startTime;
-            evt.subject = randomization_block.subject(1);
-            evt.block = randomization_block.block(1);
-            evt.trialNumber = trialNum-1;
-            evt.stimulus = randomization_block.stimulus(trialNum-1);
-            responses = [responses evt];
-        end
-    end
     
     % Flicker
     if randomization_block.flickerDot(trialNum) ~= 0
@@ -109,28 +92,19 @@ for trialNum = 1:ntrials
         end
     end
     
-    % Save timings and further relevant information
-    stimtimings(trialNum,1) = stimOnset;
-    expectedtimings(trialNum,2) = expectedTime;
-    stimtimings(trialNum,5) = trialNum;
-    stimtimings(trialNum,6) = randomization_block.block(trialNum);
-    
-    % Read out response to last target of block
+    % Leave time to read out response to last stimulus of block
     if trialNum == length(randomization_block.trial)
         WaitSecs(2);
-        expectedTime = expectedTime + 2;
-        Screen('FillRect',cfg.win,cfg.background);
-        endBlock = Screen('Flip',cfg.win,startTime+expectedTime-cfg.halfifi,1)-startTime;
-        send_trigger('blockEnd',endBlock,cfg); % Send lsl trigger for block end
-        blockOnOff(2) = endBlock; % Store time at which blocks end
     end
+
+    % Read button presses
     while true
         if ~KbEventAvail(cfg.ix_responseDevice)
             break
         end
         evt = KbEventGet(cfg.ix_responseDevice);
         if evt.Pressed==1 % Don't record key releases
-            send_trigger('buttonpress',evt.Time-startTime,cfg);
+            send_trigger('buttonpress',evt.Time-startTime,cfg); % Send lsl trigger for response
             evt.TimeMinusStart = evt.Time-startTime;
             evt.subject = randomization_block.subject(1);
             evt.block = randomization_block.block(1);
@@ -139,7 +113,22 @@ for trialNum = 1:ntrials
             responses = [responses evt];
         end
     end
+
+    % Send lsl trigger for block end
+    if trialNum == length(randomization_block.trial)
+        expectedTime = expectedTime + 2;
+        Screen('FillRect',cfg.win,cfg.background);
+        endBlock = Screen('Flip',cfg.win,startTime+expectedTime-cfg.halfifi,1)-startTime;
+        send_trigger('blockEnd',endBlock,cfg);
+        blockOnOff(2) = endBlock; % Store time at which blocks end
+    end
     
+    % Save timings and further relevant information
+    stimtimings(trialNum,1) = stimOnset;
+    expectedtimings(trialNum,2) = expectedTime;
+    stimtimings(trialNum,5) = trialNum;
+    stimtimings(trialNum,6) = randomization_block.block(trialNum);
+
     % Safe quit mechanism (hold q to quit)
     [keyPr,~,key,~] = KbCheck;
     % && instead of & causes crashes here, for some reason

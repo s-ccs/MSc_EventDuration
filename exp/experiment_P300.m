@@ -69,7 +69,7 @@ for trialNum = 1:length(randomization_block.trial)
     draw_fixationdot(cfg,cfg.P300.dotSize)
     stimOffset = Screen('Flip',cfg.win,startTime+expectedTime-cfg.halfifi,1)-startTime;
     send_trigger('stimOffset',stimOffset,cfg) % Send lsl trigger for stimOffset
-    a = GetSecs();
+    t0 = GetSecs();
     % Length of ITI
     expectedTime = expectedTime + randomization_block.ITI(trialNum);
 
@@ -78,9 +78,9 @@ for trialNum = 1:length(randomization_block.trial)
         WaitSecs(randomization_block.ITI(trialNum));
     end
 
-    % Read out button presses
-    b = 0;
-    while (b-a) < (randomization_block.ITI(trialNum)-0.01)
+    % Read button presses
+    t = 0;
+    while (t-t0) < (randomization_block.ITI(trialNum)-0.01)
         while true
             if ~KbEventAvail(cfg.ix_responseDevice)
                 break
@@ -96,9 +96,8 @@ for trialNum = 1:length(randomization_block.trial)
                 evt.condition = randomization_block.condition(trialNum);
                 responses = [responses evt];
             end
-
         end
-        b = GetSecs();
+        t = GetSecs();
     end
 
     % Send lsl trigger for block end

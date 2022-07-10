@@ -16,8 +16,8 @@ cfg = struct(); % Initialise cfg
 addpath(genpath('/home/stimulus/projects/2021-timingTest/EEG-trigger-check/lib/liblsl-Matlab/'));
 disp('Loading library...');
 lib = lsl_loadlib();
-info = lsl_streaminfo(lib,'LSL_Markers_Matlab','Markers',1,0,'cf_string','myuniquesourceid23444');
-cfg.outlet = lsl_outlet(info);
+cfg.info = lsl_streaminfo(lib,'LSL_Markers_Matlab','Markers',1,0,'cf_string','myuniquesourceid23444');
+cfg.outlet = lsl_outlet(cfg.info);
 
 % Setup parallelport (LPT)
 delete(instrfindall) % closes all serial connects
@@ -30,10 +30,10 @@ fprintf(cfg.s,"SET DATA_MODE WRITE\n");
 % ger or eng instructions, use LSL or not
 % 1 = true --> do
 % 0 = false --> don't do
-cfg.do_P300    = 0;
-cfg.do_stimDur = 1;
-cfg.engInst    = 0; % English instructions
-cfg.gerInst    = 1; % German instructions
+cfg.do_P300    = 1;
+cfg.do_stimDur = 0;
+cfg.engInst    = 1; % English instructions
+cfg.gerInst    = 0; % German instructions
 cfg.debug      = 0;
 cfg.use_lsl    = 1; % lsl markers
 cfg.use_lpt    = 1; % eegoSports markers
@@ -65,7 +65,7 @@ end
 fprintf('Starting Screen\n')
 cfg = setup_window(cfg,cfg.whichScreen); % Opens psychtoolbox on specified screen
 
-% Draw 'Loading task...' so participants don't get confused if it takes some time
+% Draw 'Loading task...' so participants don't get confused if this takes some time
 Screen('TextSize',cfg.win,50);             % Set text size
 Screen('FillRect',cfg.win,cfg.background); % Set background color
 if cfg.engInst

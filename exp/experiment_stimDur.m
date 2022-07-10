@@ -15,8 +15,8 @@ setup_kbqueue(cfg);
 responses = [];
 
 %% Instructions
-instructions(cfg,randomization_block);
-KbWait(cfg.ix_responseDevice); % Wait for participant to read, pause (optional), and start block
+% instructions(cfg,randomization_block);
+% KbWait(cfg.ix_responseDevice); % Wait for participant to read, pause (optional), and start block
 
 %% MAIN TRIAL LOOP
 fprintf(['Starting block ',num2str(randomization_block.block(1)),' of ',num2str(cfg.stimDur.numBlocks),'.\n'])
@@ -104,7 +104,7 @@ for trialNum = 1:ntrials
         end
         evt = KbEventGet(cfg.ix_responseDevice);
         if evt.Pressed==1 % Don't record key releases
-            send_trigger('buttonpress',evt.Time-startTime,cfg); % Send lsl trigger for response
+            send_trigger('buttonpress',evt.Time-startTime,cfg,evt.Time); % Send lsl trigger for response
             evt.TimeMinusStart = evt.Time-startTime;
             evt.subject = randomization_block.subject(1);
             evt.block = randomization_block.block(1);

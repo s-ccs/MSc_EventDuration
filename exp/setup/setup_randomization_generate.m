@@ -53,12 +53,10 @@ for blockNum = 1:numBlocks
             targetResponse = repmat(targetResponse_dict(2),1,numTrials);
         end
         
-        % Inter-trial intervals (0.8-2.5 s)
-        ITI = randsample((0.810+(0:0.01:1.690)),numTrials,true,(0.1.^(0:0.01:1.690)));
-        % ITI of 0.8 s + 10 ms to prepare next stimulus and fix latency
-        % synchronisation problem
+        % Inter-trial intervals (0.7-2.5 s)
+        ITI = randsample((0.7+(0:0.01:1.8)),numTrials,true,(0.1.^(0:0.01:1.8)));
 %       Check distribution:
-%         ITI = randsample((0.810+(0:0.01:1.690)),1e8,true,(0.1.^(0:0.01:1.690)));
+%         ITI = randsample((0.7+(0:0.01:1.8)),1e8,true,(0.1.^(0:0.01:1.8)));
 %         histogram(ITI,1000)
         
         % Concatenate

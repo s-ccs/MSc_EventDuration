@@ -12,7 +12,7 @@ if cfg.do_P300
     catch
         disp('Could not save outFile - may not exist');
     end
-    
+
     % Set columns of events.tsv file
     if (randomization_block.block(1)==1)
         safe = struct('eventName',[],'time',[],'duration',[],'reactionTime',[],'condition',[],'stimulus',[],'response',[],'keycode',[],'targetResponse',[],'ITI',[],'trial',[],'block',[],'subject',[]);
@@ -38,7 +38,7 @@ if cfg.do_P300
         safe.block          = [safe.block          stimtimings(trialNum,4)];
         safe.subject        = [safe.subject        randomization_block.subject(trialNum)];
     end
-    
+
     % StimOffsets
     for trialNum=1:cfg.P300.numTrials
         eventName = {'stimOffset'};
@@ -63,7 +63,7 @@ if cfg.do_P300
         safe.block          = [safe.block          stimtimings(trialNum,4)];
         safe.subject        = [safe.subject        randomization_block.subject(trialNum)];
     end
-    
+
     % Responses
     for responseNum=1:length(responses)
         eventName = {'buttonpress'};
@@ -96,8 +96,8 @@ if cfg.do_P300
         safe.block          = [safe.block          getfield(responses,{responseNum},'block')];
         safe.subject        = [safe.subject        randomization_block.subject(trialNum)];
     end
-    
-% StimDur
+
+    % StimDur
 elseif cfg.do_stimDur
     % Save .mat file
     try
@@ -105,11 +105,11 @@ elseif cfg.do_stimDur
     catch
         disp('Could not save outFile - may not exist');
     end
-    
+
     if (randomization_block.block(1)==1)
         safe = struct('eventName',[],'time',[],'duration',[],'reactionTime',[],'stimulus',[],'keycode',[],'stimDur',[],'flickerDot',[],'ITI',[],'trial',[],'block',[],'subject',[]);
     end
-    
+
     % StimOnsets
     for trialNum=1:cfg.stimDur.numTrials
         eventName = {'stimOnset'};
@@ -140,7 +140,7 @@ elseif cfg.do_stimDur
         safe.block          = [safe.block          stimtimings(trialNum,6)];
         safe.subject        = [safe.subject        randomization_block.subject(trialNum)];
     end
-    
+
     % StimOffsets
     for trialNum=1:cfg.stimDur.numTrials
         % No stimOffsets for blocks without blanks except for last stimulus, since
@@ -285,7 +285,7 @@ if true
     safe.trial          = [safe.trial          NaN];
     safe.block          = [safe.block          randomization_block.block(end)];
     safe.subject        = [safe.subject        randomization_block.subject(1)];
-    
+
     % Block end
     eventName = {'blockEnd'};
     blockEnd = round(blockOnOff(2),4);
@@ -321,11 +321,24 @@ if cfg.do_P300 && (randomization_block.block(1)==cfg.P300.numBlocks)
 
     % Convert to table
     safe = struct2table(safe);
-    
+
     % Sort events table for time then blocks
     safe = sortrows(sortrows(safe,2),12);
+    % Correct condition, stimulus, and trial for buttonpresses
+    for i = 1:size(safe)
+        if strcmp(safe.eventName(i),'buttonpress')
+            a = find(strcmp(safe.eventName(1:i),'stimOnset'),1,"last");
+            b = find(strcmp(safe.eventName(1:i),'stimOffset'),1,"last");
+            if b > a
+                safe.condition(i) = safe.condition(b);
+                safe.stimulus(i) = safe.stimulus(b);
+                safe.trial(i) = safe.trial(b);
+            end
+        end
+    end
+    % Display results
     disp(safe);
-    
+
     % Write events.tsv file
     writetable(safe,cfg.P300.behavioral_filepath_tsv,'FileType','text','Delimiter','\t');
 end
@@ -338,11 +351,20 @@ if cfg.do_stimDur && (randomization_block.block(1)==cfg.stimDur.numBlocks)
     end
     % Convert to table
     safe = struct2table(safe);
-    
+
     % Sort events table for time then blocks, and write events file
     safe = sortrows(sortrows(safe,2),11);
+    % Correct stimulus and trial for buttonpresses
+    for i = 1:size(safe)
+        if strcmp(safe.eventName(i),'buttonpress')
+            a = find(strcmp(safe.eventName(1:i),'stimOnset'),1,"last");
+            safe.stimulus(i) = safe.stimulus(a);
+            safe.trial(i) = safe.trial(a);
+        end
+    end
+    % Display results
     disp(safe);
-    
+
     % Write events.tsv file
     writetable(safe,cfg.stimDur.behavioral_filepath_tsv,'FileType','text','Delimiter','\t');
 end

@@ -15,14 +15,14 @@ setup_kbqueue(cfg);
 responses = [];
 
 %% Instructions
-instructions(cfg,randomization_block);
-KbWait(cfg.ix_responseDevice); % Wait for participant to read, pause (optional), and start block
+% instructions(cfg,randomization_block);
+% KbWait(cfg.ix_responseDevice); % Wait for participant to read, pause (optional), and start block
 
 %% MAIN TRIAL LOOP
 fprintf(['Starting block ',num2str(randomization_block.block(1)),' of ',num2str(cfg.P300.numBlocks),'.\n'])
+Screen('TextSize',cfg.win,cfg.P300.stimSize); % Set stimulus size
 draw_fixationdot(cfg,cfg.P300.dotSize) % Start with fixation cross
 startTime = Screen('Flip',cfg.win); % Store time at which experiment started
-Screen('TextSize',cfg.win,cfg.P300.stimSize); % Set stimulus size
 expectedTime = 0; % This will record what the expected event duration should be
 send_trigger('blockStart',expectedTime,cfg); % Send lsl trigger for block start
 blockOnOff(1) = expectedTime; % Store time at which blocks start
@@ -69,7 +69,6 @@ for trialNum = 1:length(randomization_block.trial)
     draw_fixationdot(cfg,cfg.P300.dotSize)
     stimOffset = Screen('Flip',cfg.win,startTime+expectedTime-cfg.halfifi,1)-startTime;
     send_trigger('stimOffset',stimOffset,cfg) % Send lsl trigger for stimOffset
-    t0 = GetSecs();
     % Length of ITI
     expectedTime = expectedTime + randomization_block.ITI(trialNum);
 
@@ -79,15 +78,13 @@ for trialNum = 1:length(randomization_block.trial)
     end
 
     % Read button presses
-    t = 0;
-    while (t-t0) < (randomization_block.ITI(trialNum)-0.01)
         while true
             if ~KbEventAvail(cfg.ix_responseDevice)
                 break
             end
             evt = KbEventGet(cfg.ix_responseDevice);
             if evt.Pressed==1 % Don't record key releases
-                send_trigger('buttonpress',evt.Time-startTime,cfg); % Send lsl trigger for response
+                send_trigger('buttonpress',evt.Time-startTime,cfg,evt.Time); % Send lsl trigger for response
                 evt.TimeMinusStart = evt.Time-startTime;
                 evt.subject = randomization_block.subject(1);
                 evt.block = randomization_block.block(1);
@@ -97,8 +94,7 @@ for trialNum = 1:length(randomization_block.trial)
                 responses = [responses evt];
             end
         end
-        t = GetSecs();
-    end
+
 
     % Send lsl trigger for block end
     if trialNum == length(randomization_block.trial)

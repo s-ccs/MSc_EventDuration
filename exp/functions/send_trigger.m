@@ -15,8 +15,15 @@ cfg=varargin{3};
 
 % Send LSL triggers
 if cfg.use_lsl
-    triggerNum = sprintf('%s:%.4f',message,time);
-    cfg.outlet.push_sample({triggerNum});
+    if strcmp(message,'buttonpress')
+        triggerNum = sprintf('%s:%.4f',message,time);
+        % LSL timestamp is corrected by time between buttonpress and time
+        % where trigger is sent - according to psychtoolbox clock (GetSecs)
+        cfg.outlet.push_sample({triggerNum},lsl_local_clock(cfg.info.LibHandle)-(GetSecs()-varargin{4}));
+    else
+        triggerNum = sprintf('%s:%.4f',message,time);
+        cfg.outlet.push_sample({triggerNum});
+    end
 end
 
 % Send EEG markers

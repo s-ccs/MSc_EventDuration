@@ -10,7 +10,7 @@ devices = PsychHID('Devices',4);
 % bottom right button: 14
 
 while (1)
-    [keyIsDown, keyTime, keyCode] = KbCheck(12);
+    [keyIsDown, keyTime, keyCode] = KbCheck(11);
     if (keyIsDown), break, end
 end
 

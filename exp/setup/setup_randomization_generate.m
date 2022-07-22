@@ -6,7 +6,7 @@ end
 
 % Check that numBlocks is divisible by 10
 if cfg.do_P300
-    assert(ceil(numBlocks/5) == floor(numBlocks/5))
+     assert(ceil(numBlocks/5) == floor(numBlocks/5))
 end
 
 % Reset the random seed to make the randomization repeatable
@@ -70,7 +70,7 @@ for blockNum = 1:numBlocks
         % Face stimuli
         stimulus = datasample(cfg.stimDur.stimTex,numTrials);
         rand_shuffle = randperm(numTrials);
-        
+
         % Inter-trial intervals (0.8-2.5 s)
         ITI = randsample((0.8+(0:0.01:1.7)),numTrials,true,(0.1.^(0:0.01:1.7)));
         if mod(blockNum,2)==0
@@ -81,7 +81,7 @@ for blockNum = 1:numBlocks
         
         % Stimulus duration (i.e. time from stimOnset(face) to stimOffset (if with blanks) 
         % or to next stimOnset (if without blanks))
-        pd=makedist('Loguniform','Lower',0.1,'Upper',1.5);
+        pd = makedist('Loguniform','Lower',0.1,'Upper',1.5);
         x = (0.1:0.01:1.5);
         y = pdf(pd,x);
         stimDur = randsample(x,numTrials,true,y);
@@ -91,7 +91,6 @@ for blockNum = 1:numBlocks
 %         figure(),scatter(x,y);
 %         xline(mean(stimDur),'b');
 %         xline(median(stimDur),'y');
-
 
         % Concatenate (put it here bcs required for setup_flickertimings())
         randomization.stimDur = [randomization.stimDur stimDur];

@@ -15,8 +15,8 @@ setup_kbqueue(cfg);
 responses = [];
 
 %% Instructions
-% instructions(cfg,randomization_block);
-% KbWait(cfg.ix_responseDevice); % Wait for participant to read, pause (optional), and start block
+instructions(cfg,randomization_block);
+KbWait(cfg.ix_responseDevice); % Wait for participant to read, pause (optional), and start block
 
 %% MAIN TRIAL LOOP
 fprintf(['Starting block ',num2str(randomization_block.block(1)),' of ',num2str(cfg.P300.numBlocks),'.\n'])

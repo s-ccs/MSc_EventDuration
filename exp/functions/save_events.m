@@ -15,7 +15,7 @@ if cfg.do_P300
 
     % Set columns of events.tsv file
     if (randomization_block.block(1)==1)
-        safe = struct('eventName',[],'time',[],'duration',[],'reactionTime',[],'condition',[],'stimulus',[],'response',[],'keycode',[],'targetResponse',[],'ITI',[],'trial',[],'block',[],'subject',[]);
+        safe = struct('eventName',[],'time',[],'duration',[],'reactionTime',[],'condition',[],'stimulus',[],'keycode',[],'targetResponse',[],'ITI',[],'trial',[],'block',[],'subject',[]);
     end
 
     % StimOnsets
@@ -30,7 +30,6 @@ if cfg.do_P300
         safe.reactionTime   = [safe.reactionTime   NaN];
         safe.condition      = [safe.condition      {randomization_block.condition{trialNum}}]; %#ok<*CCAT1>
         safe.stimulus       = [safe.stimulus       {cfg.P300.symbols(randomization_block.stimulus(trialNum))}];
-        safe.response       = [safe.response       {'NaN'}];
         safe.keycode        = [safe.keycode        NaN];
         safe.targetResponse = [safe.targetResponse randomization_block.targetResponse(trialNum)];
         safe.ITI            = [safe.ITI            NaN];
@@ -55,7 +54,6 @@ if cfg.do_P300
         safe.reactionTime   = [safe.reactionTime   NaN];
         safe.condition      = [safe.condition      {randomization_block.condition{trialNum}}];
         safe.stimulus       = [safe.stimulus       {cfg.P300.symbols(randomization_block.stimulus(trialNum))}];
-        safe.response       = [safe.response       {'NaN'}];
         safe.keycode        = [safe.keycode        NaN];
         safe.targetResponse = [safe.targetResponse randomization_block.targetResponse(trialNum)];
         safe.ITI            = [safe.ITI            randomization_block.ITI(trialNum)];
@@ -72,25 +70,14 @@ if cfg.do_P300
         stimOnset = stimtimings(:,1);
         [~,ix_stimOnset] = max(stimOnset(stimOnset<timeResponse));
         reactionTime = round(timeResponse - stimtimings(ix_stimOnset,1),4);
-        % Determine whether response was correct or false
-        targetResponse = randomization_block.targetResponse(trialNum);
-        if (targetResponse=="right" && getfield(responses,{responseNum},'Keycode')==12 && strcmp(getfield(responses,{responseNum},'condition'),'target'))...
-                || (targetResponse=="right" && getfield(responses,{responseNum},'Keycode')==11 && strcmp(getfield(responses,{responseNum},'condition'),'distractor'))...
-                || (targetResponse=="left" && getfield(responses,{responseNum},'Keycode')==11 && strcmp(getfield(responses,{responseNum},'condition'),'target'))...
-                || (targetResponse=="left" && getfield(responses,{responseNum},'Keycode')==12 && strcmp(getfield(responses,{responseNum},'condition'),'distractor'))
-            response = {'correct'};
-        else
-            response = {'false'};
-        end
         safe.eventName      = [safe.eventName      eventName];
         safe.time           = [safe.time           timeResponse];
         safe.duration       = [safe.duration       NaN];
         safe.reactionTime   = [safe.reactionTime   reactionTime];
         safe.condition      = [safe.condition      getfield(responses,{responseNum},'condition')];
         safe.stimulus       = [safe.stimulus       {getfield(responses,{responseNum},'stimulus')}];
-        safe.response       = [safe.response       response];
         safe.keycode        = [safe.keycode        getfield(responses,{responseNum},'Keycode')];
-        safe.targetResponse = [safe.targetResponse targetResponse];
+        safe.targetResponse = [safe.targetResponse randomization_block.targetResponse(trialNum)];
         safe.ITI            = [safe.ITI            NaN];
         safe.trial          = [safe.trial          getfield(responses,{responseNum},'trialNumber')];
         safe.block          = [safe.block          getfield(responses,{responseNum},'block')];
@@ -267,7 +254,6 @@ if true
     blockStart = round(blockOnOff(1),4);
     if cfg.do_P300
         safe.condition  = [safe.condition      {'NaN'}];
-        safe.response   = [safe.response       {'NaN'}];
         safe.targetResponse = [safe.targetResponse {'NaN'}];
         safe.ITI        = [safe.ITI            NaN];
         safe.stimulus       = [safe.stimulus       {'NaN'}];
@@ -291,7 +277,6 @@ if true
     blockEnd = round(blockOnOff(2),4);
     if cfg.do_P300
         safe.condition  = [safe.condition      {'NaN'}];
-        safe.response   = [safe.response       {'NaN'}];
         safe.targetResponse = [safe.targetResponse {'NaN'}];
         safe.ITI        = [safe.ITI            NaN];
         safe.stimulus       = [safe.stimulus       {'NaN'}];
@@ -323,7 +308,7 @@ if cfg.do_P300 && (randomization_block.block(1)==cfg.P300.numBlocks)
     safe = struct2table(safe);
 
     % Sort events table for time then blocks
-    safe = sortrows(sortrows(safe,2),12);
+    safe = sortrows(sortrows(safe,2),11);
     % Correct condition, stimulus, and trial for buttonpresses
     for i = 1:size(safe)
         if strcmp(safe.eventName(i),'buttonpress')

@@ -6,7 +6,7 @@
 close all; clear all; clc;
 tic; % Start stopwatch timer
 
-% Initialise paths
+% Initialise paths1
 cd ~/projects/2022-MScGeiger/MSc_EventDuration/exp/;
 addpath(genpath('.'));
 addpath(genpath('/usr/share/psychtoolbox-3/'));
@@ -86,22 +86,24 @@ try
     % Declare paths where to save data
     if cfg.do_P300
         task = {'P300'};
+        task1 = {'Oddball'};
     elseif cfg.do_stimDur
         task = {'stimDur'};
+        task1 = {'Duration'};
     end
-    cfg.(task{1}).randomization_filepath = fullfile('../..','data',sprintf('subj-%03i',SID),'ses-01','beh',sprintf('sub-%03i_task-%s_randomization.tsv',SID,task{1}));
-    cfg.(task{1}).behavioral_filepath_mat = fullfile('../..','data',sprintf('subj-%03i',SID),'ses-01','beh',sprintf('sub-%03i_task-%s_events.mat',SID,task{1}));
-    cfg.(task{1}).behavioral_filepath_tsv = fullfile('../..','data',sprintf('subj-%03i',SID),'ses-01','beh',sprintf('sub-%03i_task-%s_events.tsv',SID,task{1}));
+    cfg.(task{1}).randomization_filepath = fullfile('../..','data',sprintf('sub-%03i',SID),'ses-001','beh',sprintf('sub-%03i_task-%s_randomization.tsv',SID,task1{1}));
+    cfg.(task{1}).behavioral_filepath_mat = fullfile('../..','data',sprintf('sub-%03i',SID),'ses-001','beh',sprintf('sub-%03i_task-%s_events.mat',SID,task1{1}));
+    cfg.(task{1}).behavioral_filepath_tsv = fullfile('../..','data',sprintf('sub-%03i',SID),'ses-001','beh',sprintf('sub-%03i_task-%s_events.tsv',SID,task1{1}));
 
     if cfg.debug
         error % force randomization regen
     end
 
     % Load randomization
-    randomization.(task{1}) = struct2table(tdfread(fullfile('../..','data',sprintf('subj-%03i',SID),'ses-01','beh',sprintf('sub-%03i_task-%s_randomization.tsv',SID,task{1}))));
+    randomization.(task{1}) = struct2table(tdfread(fullfile('../..','data',sprintf('sub-%03i',SID),'ses-001','beh',sprintf('sub-%03i_task-%s_randomization.tsv',SID,task1{1}))));
     if cfg.do_P300
-        randomization.P300.condition = cellstr(randomization.P300.condition);
-        randomization.P300.targetResponse = cellstr(randomization.P300.targetResponse);
+        randomization.P300.condition = cellstr(randomization.Oddball.condition);
+        randomization.P300.targetResponse = cellstr(randomization.Oddball.targetResponse);
     end
     randomization.(task{1}).task = cellstr(randomization.(task{1}).task);
     fprintf('Loading Randomization from disk\n')

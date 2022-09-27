@@ -95,7 +95,6 @@ for trialNum = 1:length(randomization_block.trial)
             end
         end
 
-
     % Send lsl trigger for block end
     if trialNum == length(randomization_block.trial)
         Screen('FillRect',cfg.win,cfg.background);

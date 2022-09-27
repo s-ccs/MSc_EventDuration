@@ -8,14 +8,14 @@ persistent safe
 if cfg.do_P300
     % Save .mat file
     try
-        save(outFile,'responses','randomization_block','cfg','stimtimings','expectedtimings');
+        save(outFile,'responses','randomization_block','cfg','stimtimings','expectedtimings','blockOnOff');
     catch
         disp('Could not save outFile - may not exist');
     end
 
     % Set columns of events.tsv file
     if (randomization_block.block(1)==1)
-        safe = struct('eventName',[],'time',[],'duration',[],'reactionTime',[],'condition',[],'stimulus',[],'keycode',[],'targetResponse',[],'ITI',[],'trial',[],'block',[],'subject',[]);
+        safe = struct('eventName',[],'time',[],'duration',[],'reactionTime',[],'condition',[],'stimulus',[],'keycode',[],'distracterResponse',[],'ITI',[],'trial',[],'block',[],'subject',[]);
     end
 
     % StimOnsets
@@ -31,7 +31,7 @@ if cfg.do_P300
         safe.condition      = [safe.condition      {randomization_block.condition{trialNum}}]; %#ok<*CCAT1>
         safe.stimulus       = [safe.stimulus       {cfg.P300.symbols(randomization_block.stimulus(trialNum))}];
         safe.keycode        = [safe.keycode        NaN];
-        safe.targetResponse = [safe.targetResponse randomization_block.targetResponse(trialNum)];
+        safe.distracterResponse = [safe.distracterResponse randomization_block.distracterResponse(trialNum)];
         safe.ITI            = [safe.ITI            NaN];
         safe.trial          = [safe.trial          stimtimings(trialNum,3)];
         safe.block          = [safe.block          stimtimings(trialNum,4)];
@@ -55,7 +55,7 @@ if cfg.do_P300
         safe.condition      = [safe.condition      {randomization_block.condition{trialNum}}];
         safe.stimulus       = [safe.stimulus       {cfg.P300.symbols(randomization_block.stimulus(trialNum))}];
         safe.keycode        = [safe.keycode        NaN];
-        safe.targetResponse = [safe.targetResponse randomization_block.targetResponse(trialNum)];
+        safe.distracterResponse = [safe.distracterResponse randomization_block.distracterResponse(trialNum)];
         safe.ITI            = [safe.ITI            randomization_block.ITI(trialNum)];
         safe.trial          = [safe.trial          stimtimings(trialNum,3)];
         safe.block          = [safe.block          stimtimings(trialNum,4)];
@@ -77,7 +77,7 @@ if cfg.do_P300
         safe.condition      = [safe.condition      getfield(responses,{responseNum},'condition')];
         safe.stimulus       = [safe.stimulus       {getfield(responses,{responseNum},'stimulus')}];
         safe.keycode        = [safe.keycode        getfield(responses,{responseNum},'Keycode')];
-        safe.targetResponse = [safe.targetResponse randomization_block.targetResponse(trialNum)];
+        safe.distracterResponse = [safe.distracterResponse randomization_block.distracterResponse(trialNum)];
         safe.ITI            = [safe.ITI            NaN];
         safe.trial          = [safe.trial          getfield(responses,{responseNum},'trialNumber')];
         safe.block          = [safe.block          getfield(responses,{responseNum},'block')];
@@ -88,7 +88,7 @@ if cfg.do_P300
 elseif cfg.do_stimDur
     % Save .mat file
     try
-        save(outFile,'responses','randomization_block','cfg','stimtimings','expectedtimings');
+        save(outFile,'responses','randomization_block','cfg','stimtimings','expectedtimings','blockOnOff');
     catch
         disp('Could not save outFile - may not exist');
     end
@@ -160,13 +160,13 @@ elseif cfg.do_stimDur
         safe.subject        = [safe.subject        randomization_block.subject(trialNum)];
     end
 
-    % TargetOnsets
+    % distracterOnsets
     for trialNum=1:cfg.stimDur.numTrials
         if ~stimtimings(trialNum,3)
             continue
         end
-        eventName = {'targetOnset'};
-        targetOnset = round(stimtimings(trialNum,3),4);
+        eventName = {'distracterOnset'};
+        distracterOnset = round(stimtimings(trialNum,3),4);
         duration  = round(stimtimings(trialNum,4)-stimtimings(trialNum,3),4);
         if mod(randomization_block.block(1),2)==0
             safe.ITI        = [safe.ITI            {'NaN'}];
@@ -179,7 +179,7 @@ elseif cfg.do_stimDur
             safe.flickerDot = [safe.flickerDot     NaN];
         end
         safe.eventName      = [safe.eventName      eventName];
-        safe.time           = [safe.time           targetOnset];
+        safe.time           = [safe.time           distracterOnset];
         safe.duration       = [safe.duration       duration];
         safe.reactionTime   = [safe.reactionTime   NaN];
         safe.stimulus       = [safe.stimulus       randomization_block.stimulus(trialNum)];
@@ -190,20 +190,20 @@ elseif cfg.do_stimDur
         safe.subject        = [safe.subject        randomization_block.subject(trialNum)];
     end
 
-    % TargetOffsets
+    % distracterOffsets
     for trialNum=1:cfg.stimDur.numTrials
         if ~stimtimings(trialNum,4)
             continue
         end
-        eventName = {'targetOffset'};
-        targetOffset = round(stimtimings(trialNum,4),4);
+        eventName = {'distracterOffset'};
+        distracterOffset = round(stimtimings(trialNum,4),4);
         if mod(randomization_block.block(1),2)==0
             safe.ITI        = [safe.ITI            {'NaN'}];
         elseif mod(randomization_block.block(1),2)~=0
             safe.ITI        = [safe.ITI            {'no blanks'}];
         end
         safe.eventName      = [safe.eventName      eventName];
-        safe.time           = [safe.time           targetOffset];
+        safe.time           = [safe.time           distracterOffset];
         safe.duration       = [safe.duration       NaN];
         safe.reactionTime   = [safe.reactionTime   NaN];
         safe.stimulus       = [safe.stimulus       randomization_block.stimulus(trialNum)];
@@ -220,10 +220,10 @@ elseif cfg.do_stimDur
         eventName = {'buttonpress'};
         timeResponse = round(getfield(responses,{responseNum},'TimeMinusStart'),4);
         % Calculate reaction time
-        targetOnset = stimtimings(:,3);
-        [~,ix_targetOnset] = max(targetOnset(targetOnset<timeResponse));
-        reactionTime = round(timeResponse - stimtimings(ix_targetOnset,3),4);
-        % Remove RT for responses before first targetOnset
+        distracterOnset = stimtimings(:,3);
+        [~,ix_distracterOnset] = max(distracterOnset(distracterOnset<timeResponse));
+        reactionTime = round(timeResponse - stimtimings(ix_distracterOnset,3),4);
+        % Remove RT for responses before first distracterOnset
         if reactionTime == timeResponse
             reactionTime = NaN;
         end
@@ -254,7 +254,7 @@ if true
     blockStart = round(blockOnOff(1),4);
     if cfg.do_P300
         safe.condition  = [safe.condition      {'NaN'}];
-        safe.targetResponse = [safe.targetResponse {'NaN'}];
+        safe.distracterResponse = [safe.distracterResponse {'NaN'}];
         safe.ITI        = [safe.ITI            NaN];
         safe.stimulus       = [safe.stimulus       {'NaN'}];
     elseif cfg.do_stimDur
@@ -277,7 +277,7 @@ if true
     blockEnd = round(blockOnOff(2),4);
     if cfg.do_P300
         safe.condition  = [safe.condition      {'NaN'}];
-        safe.targetResponse = [safe.targetResponse {'NaN'}];
+        safe.distracterResponse = [safe.distracterResponse {'NaN'}];
         safe.ITI        = [safe.ITI            NaN];
         safe.stimulus       = [safe.stimulus       {'NaN'}];
     elseif cfg.do_stimDur

@@ -48,17 +48,17 @@ if cfg.do_P300
     WaitSecs(.75); % Would otherwise jump next KbWait occasionally
     
     % Block instructions
-    % Determine target and corresponding response (left vs. right) for block
-    currTarget = cfg.P300.symbols(randomization_block.stimulus(find(contains(randomization_block.condition,'target'),1)));
-    targetResponse = randomization_block.targetResponse(1);
+    % Determine distracter and corresponding response (left vs. right) for block
+    currdistracter = cfg.P300.symbols(randomization_block.stimulus(find(contains(randomization_block.condition,'distracter'),1)));
+    distracterResponse = randomization_block.distracterResponse(1);
     Screen('TextSize',cfg.win,80);
     % Draw letters on left/right side with corresponding color on button box
-    if strcmp(targetResponse,'right')
-        DrawFormattedText2(['<color=0072BD>',setdiff(cfg.P300.symbols,currTarget)],'win',cfg.win,'sx',1/3*cfg.rect(3),'sy','center','xalign','center','yalign','center','xlayout','center');
-        DrawFormattedText2(['<color=EDB120>',currTarget],'win',cfg.win,'sx',2/3*cfg.rect(3),'sy','center','xalign','center','yalign','center','xlayout','center');
-    elseif strcmp(targetResponse,'left')
-        DrawFormattedText2(['<color=0072BD>',currTarget],'win',cfg.win,'sx',1/3*cfg.rect(3),'sy','center','xalign','center','yalign','center','xlayout','center');
-        DrawFormattedText2(['<color=EDB120>',setdiff(cfg.P300.symbols,currTarget)],'win',cfg.win,'sx',2/3*cfg.rect(3),'sy','center','xalign','center','yalign','center','xlayout','center');
+    if strcmp(distracterResponse,'right')
+        DrawFormattedText2(['<color=0072BD>',setdiff(cfg.P300.symbols,currdistracter)],'win',cfg.win,'sx',1/3*cfg.rect(3),'sy','center','xalign','center','yalign','center','xlayout','center');
+        DrawFormattedText2(['<color=EDB120>',currdistracter],'win',cfg.win,'sx',2/3*cfg.rect(3),'sy','center','xalign','center','yalign','center','xlayout','center');
+    elseif strcmp(distracterResponse,'left')
+        DrawFormattedText2(['<color=0072BD>',currdistracter],'win',cfg.win,'sx',1/3*cfg.rect(3),'sy','center','xalign','center','yalign','center','xlayout','center');
+        DrawFormattedText2(['<color=EDB120>',setdiff(cfg.P300.symbols,currdistracter)],'win',cfg.win,'sx',2/3*cfg.rect(3),'sy','center','xalign','center','yalign','center','xlayout','center');
     end
     % Instructions for block
     Screen('TextSize',cfg.win,40);
@@ -82,9 +82,9 @@ if cfg.do_stimDur
         fprintf('Experiment instructions\n');
         while ~KbEventAvail(cfg.ix_responseDevice)
             % Flicker dot in "animation" every 1 s
-            flicker = mod(GetSecs,1)<cfg.stimDur.targetsDuration;
+            flicker = mod(GetSecs,1)<cfg.stimDur.distractersDuration;
             if flicker
-                colorInside = cfg.stimDur.targetColor*cfg.Lmax_rgb;
+                colorInside = cfg.stimDur.distracterColor*cfg.Lmax_rgb;
             else
                 colorInside = 0;
             end

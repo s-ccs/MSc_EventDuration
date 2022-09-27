@@ -6,8 +6,8 @@
 close all; clear all; clc;
 tic; % Start stopwatch timer
 
-% Initialise paths1
-cd ~/projects/2022-MScGeiger/MSc_EventDuration/exp/;
+% Initialise paths
+%cd ~/projects/2022-MScGeiger/MSc_EventDuration/exp/;
 addpath(genpath('.'));
 addpath(genpath('/usr/share/psychtoolbox-3/'));
 cfg = struct(); % Initialise cfg
@@ -29,9 +29,9 @@ fprintf(cfg.s,"SET DATA_MODE WRITE\n");
 % Check which experiment(s) to run, in debug mode or with participant,
 % ger or eng instructions, use LSL or not
 % 1 = true --> do
-% 0 = false --> don't do
-cfg.do_P300    = 1;
-cfg.do_stimDur = 0;
+% 0 = false --> don't do2
+cfg.do_P300    = 0;
+cfg.do_stimDur = 1;
 cfg.engInst    = 1; % English instructions
 cfg.gerInst    = 0; % German instructions
 cfg.debug      = 0;
@@ -103,7 +103,7 @@ try
     randomization.(task{1}) = struct2table(tdfread(fullfile('../..','data',sprintf('sub-%03i',SID),'ses-001','beh',sprintf('sub-%03i_task-%s_randomization.tsv',SID,task1{1}))));
     if cfg.do_P300
         randomization.P300.condition = cellstr(randomization.Oddball.condition);
-        randomization.P300.targetResponse = cellstr(randomization.Oddball.targetResponse);
+        randomization.P300.distracterResponse = cellstr(randomization.Oddball.distracterResponse);
     end
     randomization.(task{1}).task = cellstr(randomization.(task{1}).task);
     fprintf('Loading Randomization from disk\n')

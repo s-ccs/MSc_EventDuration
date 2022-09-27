@@ -1,17 +1,17 @@
 function flicker_dot = setup_flickertimings(params,ntrial,randomization,blockNum)
-assert(all(isfield(params,{'targetsPerTrial','targetsTimeDelta'})))
+assert(all(isfield(params,{'distractersPerTrial','distractersTimeDelta'})))
 
 % How often should the dot flicker?
-totalFlicker = floor(params.targetsPerTrial*ntrial);
+totalFlicker = floor(params.distractersPerTrial*ntrial);
 if blockNum==1
     flickertime  = sum(randomization.stimDur());
 elseif blockNum>1
     flickertime  = sum(randomization.stimDur(1+ntrial*(blockNum-1):ntrial+ntrial*(blockNum-1)));
 end
 % Generate flickertimings and make sure they're separated by at least
-% targetsTimeDelta
+% distractersTimeDelta
 flickertimings = sort(rand(totalFlicker,1)*flickertime);
-while any(diff(flickertimings)<params.targetsTimeDelta)
+while any(diff(flickertimings)<params.distractersTimeDelta)
     flickertimings = sort(rand(totalFlicker,1)*flickertime);
 end
 
@@ -23,16 +23,16 @@ for i=1:length(flickertimings)
     for j=1+ntrial*(blockNum-1):length(randomization.stimDur)
         if (sum(randomization.stimDur(1+ntrial*(blockNum-1):j))>flickertimings(i))
             % Make sure stimDur is long enough for 100 ms flicker
-            if ((sum(randomization.stimDur(1+ntrial*(blockNum-1):j))-flickertimings(i))>params.targetsDuration) && (j==1)
+            if ((sum(randomization.stimDur(1+ntrial*(blockNum-1):j))-flickertimings(i))>params.distractersDuration) && (j==1)
                 trialFlicker.whichTrial(j) = randomization.trial(j);
                 trialFlicker.whenInTrial(j) = flickertimings(i);
                 break
-            elseif ((sum(randomization.stimDur(1+ntrial*(blockNum-1):j))-flickertimings(i))>params.targetsDuration)...
+            elseif ((sum(randomization.stimDur(1+ntrial*(blockNum-1):j))-flickertimings(i))>params.distractersDuration)...
                     || (j==length(randomization.stimDur))
                 trialFlicker.whichTrial(j) = randomization.trial(j);
                 trialFlicker.whenInTrial(j) = flickertimings(i)-sum(randomization.stimDur(1+ntrial*(blockNum-1):j-1));
                 break
-            elseif ((sum(randomization.stimDur(1+ntrial*(blockNum-1):j))-flickertimings(i))<params.targetsDuration)
+            elseif ((sum(randomization.stimDur(1+ntrial*(blockNum-1):j))-flickertimings(i))<params.distractersDuration)
                 % Remaining stimDur of trial is too short for 100 ms flicker:
                 % If stimDur is >200ms (i.e. there is enough time in this trial),
                 % flicker 100 ms earlier than it should

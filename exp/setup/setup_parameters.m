@@ -23,12 +23,12 @@ end
 
 %% stimDur
 if cfg.do_stimDur
-    cfg.stimDur.numBlocks = 6;
-    cfg.stimDur.numTrials = 120;
-    cfg.stimDur.targetColor = [1,0,0];      % Color of flickering dot - red
+    cfg.stimDur.numBlocks = 2;
+    cfg.stimDur.numTrials = 20;
+    cfg.stimDur.distracterColor = [1,0,0];      % Color of flickering dot - red
     cfg.stimDur.dotSize = 1.5*[0.25 0.06];  % Size of fixation dot in pixels
-    cfg.stimDur.targetsPerTrial = 0.1;      % Flicker probability is 10 % --> 1 flicker per 10 trials
-    cfg.stimDur.targetsTimeDelta = 4;       % in s --> flickers have to be at least 5s apart
-    cfg.stimDur.targetsDuration = 0.1;      % Flicker for 100ms
+    cfg.stimDur.distractersPerTrial = 0.1;      % Flicker probability is 10 % --> 1 flicker per 10 trials
+    cfg.stimDur.distractersTimeDelta = 4;       % in s --> flickers have to be at least 5s apart
+    cfg.stimDur.distractersDuration = 0.1;      % Flicker for 100ms
 end
 

@@ -27,8 +27,42 @@ if cfg.use_lsl
 end
 
 % Send EEG markers
-if cfg.use_lpt
-    fprintf(cfg.s, 'WRITE %i 10000 0\n',triggerNum);
+% if cfg.use_lpt
+%     fprintf(cfg.s, 'WRITE %i 10000 0\n',triggerNum);
+% end
+if cfg.do_P300
+    if cfg.use_lpt
+        if strcmp(message,'buttonpress')
+            fprintf(cfg.s, 'WRITE %i 10000 0\n',4);
+        elseif strcmp(message,'blockStart')
+            fprintf(cfg.s, 'WRITE %i 10000 0\n',1);
+        elseif strcmp(message,'blockEnd')
+            fprintf(cfg.s, 'WRITE %i 10000 0\n',5);
+        elseif strcmp(message,'stimOnset')
+            fprintf(cfg.s, 'WRITE %i 10000 0\n',2);
+        elseif strcmp(message,'stimOffset')
+            fprintf(cfg.s, 'WRITE %i 10000 0\n',3);
+        end
+    end
+    WaitSecs(0.01);
+elseif cfg.do_stimDur
+    if cfg.use_lpt
+        if strcmp(message,'buttonpress')
+            fprintf(cfg.s, 'WRITE %i 10000 0\n',4);
+        elseif strcmp(message,'blockStart')
+            fprintf(cfg.s, 'WRITE %i 10000 0\n',1);
+        elseif strcmp(message,'blockEnd')
+            fprintf(cfg.s, 'WRITE %i 10000 0\n',5);
+        elseif strcmp(message,'stimOnset')
+            fprintf(cfg.s, 'WRITE %i 10000 0\n',2);
+        elseif strcmp(message,'stimOffset')
+            fprintf(cfg.s, 'WRITE %i 10000 0\n',3);
+        elseif strcmp(message,'distracterOnset')
+            fprintf(cfg.s, 'WRITE %i 10000 0\n',6);
+        elseif strcmp(message,'distracterOffset')
+            fprintf(cfg.s, 'WRITE %i 10000 0\n',7);
+        end
+    end
+    WaitSecs(0.003);
 end
-
 end

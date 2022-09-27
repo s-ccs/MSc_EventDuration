@@ -55,22 +55,22 @@ for trialNum = 1:ntrials
         % Flicker gets their own expectedTime to not disturb others
         expectedTime_flicker = expectedTime+randomization_block.flickerDot(trialNum);
         Screen ('DrawTexture',cfg.win,currStim);
-        draw_fixationdot(cfg,params.dotSize,0,params.targetColor*cfg.Lmax_rgb);
-        targetOnset = Screen('Flip',cfg.win,startTime+expectedTime_flicker-cfg.halfifi)-startTime;
-        send_trigger('targetOnset',targetOnset,cfg); % Send LSL trigger for flicker start
+        draw_fixationdot(cfg,params.dotSize,0,params.distracterColor*cfg.Lmax_rgb);
+        distracterOnset = Screen('Flip',cfg.win,startTime+expectedTime_flicker-cfg.halfifi)-startTime;
+        send_trigger('distracterOnset',distracterOnset,cfg); % Send LSL trigger for flicker start
         expectedtimings(trialNum,3) = expectedTime_flicker;
         
         % Flicker off (reset to normal color)
-        expectedTime_flicker = expectedTime_flicker+params.targetsDuration;
+        expectedTime_flicker = expectedTime_flicker+params.distractersDuration;
         Screen ('DrawTexture',cfg.win,currStim);
         draw_fixationdot(cfg,params.dotSize);
-        targetOffset = Screen('Flip',cfg.win,startTime+expectedTime_flicker-cfg.halfifi)-startTime;
-        send_trigger('targetOffset',targetOffset,cfg); % % Send LSL trigger for flicker end
+        distracterOffset = Screen('Flip',cfg.win,startTime+expectedTime_flicker-cfg.halfifi)-startTime;
+        send_trigger('distracterOffset',distracterOffset,cfg); % % Send LSL trigger for flicker end
         
         % Save timings
         expectedtimings(trialNum,4) = expectedTime_flicker;
-        stimtimings(trialNum,3) = targetOnset;
-        stimtimings(trialNum,4) = targetOffset;
+        stimtimings(trialNum,3) = distracterOnset;
+        stimtimings(trialNum,4) = distracterOffset;
     end
     
     % How long should the stimulus be on?

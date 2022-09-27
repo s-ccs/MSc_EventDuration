@@ -6,22 +6,22 @@ end
 
 % Check that numBlocks is divisible by 10
 if cfg.do_P300
-     assert(ceil(numBlocks/5) == floor(numBlocks/5))
+    assert(ceil(numBlocks/5) == floor(numBlocks/5))
 end
 
 % Reset the random seed to make the randomization repeatable
 rng(subject)
 
-% Create target lists
-P300targetList = randperm(numBlocks);
-targetResponseList = randperm(numBlocks);
+% Create distracter lists
+P300distracterList = randperm(numBlocks);
+distracterResponseList = randperm(numBlocks);
 
 % Without this loop half of the P300 blocks would contain only distractors
 if task == "P300"
     for i = 1:(numBlocks/length(cfg.P300.symbols))-1
         for j = 1:numBlocks
-            if P300targetList(j)>length(cfg.P300.symbols)
-                P300targetList(j)=P300targetList(j)-length(cfg.P300.symbols);
+            if P300distracterList(j)>length(cfg.P300.symbols)
+                P300distracterList(j)=P300distracterList(j)-length(cfg.P300.symbols);
             end
         end
     end
@@ -29,7 +29,7 @@ end
 
 % Define columns for events file
 if task == "P300"
-    randomization = struct('condition',[],'stimulus',[],'ITI',[],'trial',[],'targetResponse',[],'block',[],'subject',[],'task',[]);
+    randomization = struct('condition',[],'stimulus',[],'ITI',[],'trial',[],'distracterResponse',[],'block',[],'subject',[],'task',[]);
 elseif task == "stimDur"
     randomization = struct('stimulus',[],'stimDur',[],'ITI',[],'flickerDot',[],'trial',[],'block',[],'subject',[],'task',[]);
 end
@@ -41,16 +41,16 @@ for blockNum = 1:numBlocks
         stimulus = repmat(1:length(cfg.P300.symbols),1,numTrials/length(cfg.P300.symbols));
         
         % Conditions
-        condition_dict = {'distractor','target'};
-        condition = (P300targetList(blockNum)==stimulus);
+        condition_dict = {'distractor','distracter'};
+        condition = (P300distracterList(blockNum)==stimulus);
         rand_shuffle = randperm(numTrials);
         
-        % Left vs right response to target
-        targetResponse_dict = {'left','right'};
-        if mod(targetResponseList(blockNum),2)==0
-            targetResponse = repmat(targetResponse_dict(1),1,numTrials);
+        % Left vs right response to distracter
+        distracterResponse_dict = {'left','right'};
+        if mod(distracterResponseList(blockNum),2)==0
+            distracterResponse = repmat(distracterResponse_dict(1),1,numTrials);
         else
-            targetResponse = repmat(targetResponse_dict(2),1,numTrials);
+            distracterResponse = repmat(distracterResponse_dict(2),1,numTrials);
         end
         
         % Inter-trial intervals (0.7-2.5 s)
@@ -61,7 +61,7 @@ for blockNum = 1:numBlocks
         
         % Concatenate
         randomization.condition      = [randomization.condition      condition_dict(condition(rand_shuffle)+1)];
-        randomization.targetResponse = [randomization.targetResponse targetResponse];
+        randomization.distracterResponse = [randomization.distracterResponse distracterResponse];
         randomization.trial          = [randomization.trial          1:numTrials];
         randomization.block          = [randomization.block          repmat(blockNum,1,numTrials)];
         randomization.ITI            = [randomization.ITI            ITI];
@@ -120,15 +120,15 @@ end
 randomization = struct2table(randomization);
 
 %--------------------------------------------------------------------------
-% Prevent subsequent targets in P300 experiment:
-% If two subsequent targets occur, the second target trial gets swapped 
+% Prevent subsequent distracters in P300 experiment:
+% If two subsequent distracters occur, the second distracter trial gets swapped 
 % with the trial following it.
-% Elseif this occurs at the end of a block, the last target gets put to a
+% Elseif this occurs at the end of a block, the last distracter gets put to a
 % random place within the block and everything is sorted again.
 if cfg.do_P300
-    while any(ismember(diff(find(ismember(randomization.condition,'target'))),1))
+    while any(ismember(diff(find(ismember(randomization.condition,'distracter'))),1))
         for i = 1:length(randomization.condition)-1 % -1 to prevent indexing error
-            if strcmp(randomization.condition(i),'target') && strcmp(randomization.condition(i+1),'target')...
+            if strcmp(randomization.condition(i),'distracter') && strcmp(randomization.condition(i+1),'distracter')...
                     && (mod(i+1,cfg.P300.numTrials)~=0)  % don't swap trials between blocks
                 flip = randomization(i+1,:);
                 randomization(i+1,:) = randomization(i+2,:);
@@ -137,8 +137,8 @@ if cfg.do_P300
                 flip_tr = randomization.trial(i+1,:);
                 randomization.trial(i+1,:) = randomization.trial(i+2,:);
                 randomization.trial(i+2,:) = flip_tr(1,:);
-            elseif strcmp(randomization.condition(i),'target') && strcmp(randomization.condition(i+1),'target')...
-                    && mod(i+1,cfg.P300.numTrials)==0 % prevent subsequent targets at end of block
+            elseif strcmp(randomization.condition(i),'distracter') && strcmp(randomization.condition(i+1),'distracter')...
+                    && mod(i+1,cfg.P300.numTrials)==0 % prevent subsequent distracters at end of block
                 flip_rand = round(1+(i-1).*rand(1,1));
                 flip = randomization(i-flip_rand,:);
                 randomization(i-flip_rand,:) = randomization(i+1,:);

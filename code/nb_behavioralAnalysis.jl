@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.12
+# v0.19.14
 
 using Markdown
 using InteractiveUtils
@@ -112,7 +112,7 @@ end;
 
 # ╔═╡ dd508111-93ff-491d-bfb7-7496db0a1ca8
 begin
-	subListOddball = ["004" "005" "006" "007" "008" "009" "010" "011" "012" "013" "014" "015" "016" "017" "018" "019" "020" "021" "022" "023" "024" "025" "026" "027" "028" "029" "030" "031" "032" "033" "034" "035" "036" "037" "038" "039" "040" "041"] 
+	subListOddball = ["004" "005" "006" "007" "008" "009" "010" "011" "012" "013" "014" "015" "016" "017" "019" "020" "021" "022" "024" "025" "026" "027" "028" "029" "030" "031" "032" "033" "034" "035" "036" "037" "038" "039" "040" "041"] 
 	subListDuration = ["001" "002" "003" "004" "006" "007" "008" "009" "010" "011" "012" "013" "014" "015" "016" "017" "018" "019" "020" "021" "022" "023" "024" "025" "027" "028" "029" "030" "031" "032" "033" "034" "035" "037" "038" "039" "040" "041"] 
 	eventsListOddball = Array{DataFrame}(undef,length(subListOddball))
 	eventsOddballAll = DataFrame()
@@ -524,21 +524,45 @@ begin
 if whichResults == "OddballAll"
 	# Calculate mean and median for ISIs
 	# Oddball
-	meanISIOddball = mean(stimOffsetsOddball.ITI)
-	medianISIOddball = median(stimOffsetsOddball.ITI)
+	meanISIOddball = mean(stimOffsetsOddball.ITI).*1e3
+	medianISIOddball = median(stimOffsetsOddball.ITI).*1e3
 	
 	# Histogram
 	ISIOddball = Figure()
-	axOdd = Axis(ISIOddball[1,1],xlabel="Duration [s]", ylabel="Trials",title="ISIs Oddball")
-	meanISIOdd = vlines!(current_axis(),meanISIOddball,color="red")
-	medianISIOdd = vlines!(current_axis(),medianISIOddball,color="green")
-	axislegend(axOdd,[meanISIOdd,medianISIOdd],[@sprintf("Mean = %.2f s",meanISIOddball),@sprintf("Median = %.2f s",medianISIOddball)],position=:rt)
-	xlims!(current_axis(),.7,2.5)
-	axOdd.xticks = 0.8:0.2:2.5
-	histISIOddball = hist!(stimOffsetsOddball.ITI, bins = 25)
+	axOdd = Axis(ISIOddball[1,1],
+		xlabel="Duration [ms]",
+		ylabel="Trials",
+		title="Inter-stimulus intervals",
+		topspinevisible=false,
+		rightspinevisible=false,
+		xgridvisible = false,
+		ygridvisible = false,
+		titlesize = 60,
+		xlabelsize = 60,
+		ylabelsize = 60,
+		xticklabelsize = 55,
+		yticklabelsize = 55)
+	meanISIOdd = vlines!(current_axis(),
+		meanISIOddball,
+		color="black",
+		linestyle=:dash,
+		linewidth=4)
+	medianISIOdd = vlines!(current_axis(),
+		medianISIOddball,
+		color="black",
+		linewidth=4)
+	axislegend(axOdd,
+		[meanISIOdd,medianISIOdd],
+		[@sprintf("Mean = %i ms",meanISIOddball-1),@sprintf("Median = %i ms",medianISIOddball)],
+		position=:rt,
+		labelsize=45)
+	xlims!(current_axis(),700,2500)
+	ylims!(current_axis(),0,1100)
+	axOdd.xticks = 800:200:2500
+	histISIOddball = hist!(stimOffsetsOddball.ITI.*1e3, bins = 300)
 
 	# Save plot
-	#CairoMakie.save("./results/plots/histISIOddball.png",ISIOddball,resolution=(1920,1080))
+	CairoMakie.save("./results/plots/histISIOddball.png",ISIOddball,resolution=(1920,1080))
 	
 	ISIOddball
 end
@@ -576,20 +600,66 @@ if whichResults == "OddballAll"
 	# Histogram
 	RTOddball = Figure()
 	# Targets
-	axOddRTTarget = Axis(RTOddball[1,1],xlabel="Response Time [ms]", ylabel="Trials",title="Targets")
-	meanRTTargetAllPlot = vlines!(current_axis(),meanRTTargetAll*1000,color="red")
-	axislegend(axOddRTTarget,[meanRTTargetAllPlot],[@sprintf("Mean = %.2f ms",meanRTTargetAll*1000)],position=:rt)
+	axOddRTTarget = Axis(RTOddball[1,1],
+		xlabel="Response Time [ms]", 
+		ylabel="Trials",
+		title="Targets",
+		topspinevisible=false,
+		rightspinevisible=false,
+		xgridvisible = false,
+		ygridvisible = false,
+		titlesize = 60,
+		xlabelsize = 60,
+		ylabelsize = 60,
+		xticklabelsize = 55,
+		yticklabelsize = 55)
+	meanRTTargetAllPlot = vlines!(current_axis(),
+		meanRTTargetAll*1000,
+		color="black",
+		linestyle=:dash,
+		linewidth=4)
+	axislegend(axOddRTTarget,
+		[meanRTTargetAllPlot],
+		[@sprintf("Mean = %.2f ms",meanRTTargetAll*1000)],
+		position=:rt,
+		labelsize=45)
+		#framevisible = false)
 	xlims!(current_axis(),200,1000)
-	histRTOddball = hist!(insideRTBPTarget.reactionTime.*1000,bins = 100)
+	ylims!(current_axis(),0,230)
+	axOddRTTarget.yticks = 50:50:200
+	histRTOddball = hist!(insideRTBPTarget.reactionTime.*1000,bins=100)
 	# Distractors
-	axOddRTDistractor = Axis(RTOddball[1,2],xlabel="Response Time [ms]", ylabel="Trials",title="Distracters")
-	meanRTDistractorAllPlot = vlines!(current_axis(),meanRTDistractorAll*1000,color="red")
-	axislegend(axOddRTDistractor,[meanRTDistractorAllPlot],[@sprintf("Mean = %.2f ms",meanRTDistractorAll*1000)],position=:rt)
+	axOddRTDistractor = Axis(RTOddball[1,2],
+		xlabel="Response Time [ms]",
+		ylabel="Trials",
+		title="Distractors",
+		topspinevisible=false,
+		rightspinevisible=false,
+		xgridvisible = false,
+		ygridvisible = false,
+		titlesize = 60,
+		xlabelsize = 60,
+		ylabelsize = 60,
+		xticklabelsize = 55,
+		yticklabelsize = 55)
+	meanRTDistractorAllPlot = vlines!(current_axis(),
+		meanRTDistractorAll*1000,
+		color="black",
+		linestyle=:dash,
+		linewidth=4)
+	axislegend(axOddRTDistractor,
+		[meanRTDistractorAllPlot],
+		[@sprintf("Mean = %.2f ms",meanRTDistractorAll*1000)],
+		position=:rt,
+		labelsize=45)
+		#framevisible = false)
 	xlims!(current_axis(),200,1000)
-	histRTOddball = hist!(insideRTBPDistractor.reactionTime.*1000, bins = 100)
+	ylims!(current_axis(),0,1550)
+	axOddRTDistractor.yticks = 500:500:1500
+	histRTOddball = hist!(insideRTBPDistractor.reactionTime.*1000,bins=100)
 
 	# Save plot
-	#CairoMakie.save("./results/plots/histRTOddball.png",RTOddball,resolution=(1920,1080))
+	CairoMakie.save("./results/plots/histRTOddball.png",RTOddball,resolution=(1920,1080))
 	
 	RTOddball
 end

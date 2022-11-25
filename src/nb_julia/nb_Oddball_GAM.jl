@@ -36,12 +36,16 @@ begin
 	using PyCall
 	using Bootstrap
 	using HypothesisTests
-	using TopoPlots
+	#using TopoPlots
 	using Colors
 end
 
+# ╔═╡ b1b71fee-d7ee-45e7-85a2-8316168cb0bb
+using GLMakie
+
 # ╔═╡ 0f65f18b-cfc9-4ad5-97a8-eb4dc634fb31
-md"# Mass univariate linear model
+md"# Generalised additive model
+#### Linear deconvolution for overlap correction + spline regression for RT effect
 #### Oddball task - P300
 ###### 2022-MSc Thesis by Martin Geiger"
 
@@ -73,8 +77,8 @@ function loadSub(sub,task)
 
 	# Set correct channel types for EOG channels
 	raw.set_channel_types(Dict("HEOGR"=>"eog","HEOGL"=>"eog","VEOGU"=>"eog","VEOGL"=>"eog"))
-
-	# Add subject to DataFrame to easily subset and iterate
+	
+	# Add subjectID to DataFrame to easily subset when not looking at all subjects
 	events[!,:subject] .= parse.(Int64,sub)
 	
 	return events,sfreq,raw
@@ -96,82 +100,152 @@ begin
 for (ix, sub) in enumerate(subList)
 	events,sfreq,raw = loadSub(sub,task)
 
+	# Rename to make Unfold.effects work
+	for i in 1:size(events,1)
+		if events.trial_type[i] == "bp_target"
+			events.trial_type[i] = "target"
+		elseif events.trial_type[i] == "bp_distractor"
+			events.trial_type[i] = "distractor"
+		end
+	end
+	
 	eventsList[ix] = events
 	EEG_raw = [EEG_raw;raw]
 end
 end;
 
-# ╔═╡ 95d567d3-d5b8-45d1-8024-fac2cb8e7c76
+# ╔═╡ c5d9548f-8f56-411b-ab9c-afcef6e93590
 md"# 1. Model"
 
-# ╔═╡ 820197fd-6c9d-4566-83af-8f4317c76320
-md"### 1.1 Epoch data & baseline correction"
+# ╔═╡ 71ec0643-6513-4d38-b927-7b15833b1f14
+md"### 1.1 Specify formulas and basisfunctions"
 
-# ╔═╡ 5134854f-9332-4824-9491-5e75b4cdcf60
+# ╔═╡ f8e06052-68f3-4902-b81a-fd2bd1569c89
+design_lm = Dict(
+	"stimulus"=>(
+		@formula(0~0+trial_type+spl(response_time,5)),
+		firbasis(τ=(-1,1),sfreq=sfreq,name="stimulus")),
+	"response"=>(
+		@formula(0~0+trial_type+spl(response_time,5)),
+		firbasis(τ=(-1,1),sfreq=sfreq,name="response")),);
+
+# ╔═╡ f2514060-fc56-41f2-adfb-c09a480b5fce
+md"### 1.2 Fit linear model"
+
+# ╔═╡ b265f60b-7b97-4247-ae05-cc273eddda09
 begin
-	data_e_b4bsl = []
-	t = []
-	bsl = [-0.2,0] 	#Baseline interval
-	data_e = []
-	
-	for (ix, subject) in enumerate(subList)
-		# Epoch data
-		data = reshape(EEG_raw[ix].get_data().*1e6,(64,:))
-		data_e_One,t = Unfold.epoch(data = data,
-						tbl=eventsList[ix],
-						τ=(-1,1),
-						sfreq=sfreq)
-		append!(data_e_b4bsl,[data_e_One])
+	lm = []
 
-		# Baseline correction
-		data_e_bslCorrected = Array{Union{Missing, Float64},3}(undef,size(data_e_One))
-		for i in 1:size(data_e_One,1)
-			for j in 1:size(data_e_One,3)
-				# Calculate mean of epochs within baseline interval
-				mean_bsl = mean(data_e_One[i,:,j][findfirst(t .>= bsl[1]):findlast(t .<= bsl[2])])
-				# Subtract mean_bsl from all epochs
-				data_e_bslCorrected[i,:,j] = data_e_One[i,:,j].-mean_bsl
-			end
-		end
-		append!(data_e,[data_e_bslCorrected])
+	for (ix, subject) in enumerate(subList)
+		data = EEG_raw[ix].get_data().*1e6
+
+		lmSub = fit(UnfoldModel,design_lm,eventsList[ix],data,eventcolumn="event_type")
+		
+		append!(lm,[lmSub])
 	end
 end
 
-# ╔═╡ c22782c2-354e-4eb7-8ce6-cbd80cd0a6a5
-md"### 1.2 Specify formula"
+# ╔═╡ 9051e873-cb59-4b64-982c-c6a11ff68559
+md"# 2. RT Effects"
 
-# ╔═╡ dd5f8efd-415f-465b-9131-ed464b5af1ec
-design_mu = Dict(Any=>(@formula(0~0+target+distractor+bp_target+bp_distractor),t));
-
-# ╔═╡ 942e7c12-5940-4528-bbed-4342fc722708
-md"### 1.3 Fit a linear model to each time-point & channel"
-
-# ╔═╡ 8f54f219-9a74-4196-86f6-75f1f4e19888
+# ╔═╡ f2530405-2983-468e-9552-263d905fa6c3
+# Get lowest of maximal RTs and highest of minimal RTs of all participants.
+# (Range for Unfold.effects in next cell can't exceed range between lowestMaxRTAll and highestMinRTAll!)
 begin
-	mu = []
-	muCoef = DataFrame()
-
-	for (ix, subject) in enumerate(subList)
-		m = Unfold.fit(UnfoldModel,design_mu,eventsList[ix],data_e[ix])
-		
-		append!(mu,[m])
-		append!(muCoef,coeftable(m))
+	minRTAllSub = []
+	maxRTAllSub = []
+	for i in 1:size(eventsList,1)
+		# Group eventsList by events
+		eventsList_g = groupby(eventsList[i],:trial_type)
+		# Find lowest maxRT over events
+		maxRTs = @combine(eventsList_g,:maxRT = maximum(:response_time))
+		maxRTfastestCondition = minimum(maxRTs.maxRT)
+		maxRTAllSub = vcat(maxRTAllSub,maxRTfastestCondition)
+		# Find highest minRT over events
+		minRTs = @combine(eventsList_g,:minRT = minimum(:response_time))
+		minRTslowestCondition = maximum(minRTs.minRT)
+		minRTAllSub = vcat(minRTAllSub,minRTslowestCondition)
 	end
+	lowestMaxRTAll = minimum(maxRTAllSub)
+	highestMinRTAll = maximum(minRTAllSub)
 end;
 
-# ╔═╡ 90fe4492-4d9f-4d28-b4cb-f90d465d2bc1
-md"# 2. Statistics"
+# ╔═╡ 7021f81c-aca1-4a08-a432-14c91ec21ea3
+begin
+	resultsAll = DataFrame()
+	effAll = DataFrame()
+	for (ix, subject) in enumerate(subList)
+		resOne = coeftable(lm[ix])
+		resOne.subject .= subject
+		
+		effOne = Unfold.effects(Dict(
+			:trial_type => ["target","distractor"],
+			:response_time => range(0.36,stop=0.42,length=13)),
+			lm[ix])
+		
+		effOne.subject .= subject
+		append!(resultsAll,resOne)
+		append!(effAll,effOne)
+	end
+end
 
-# ╔═╡ 650273a2-5217-4405-9536-9c1feafe8c12
+# ╔═╡ 44481692-e96c-4594-9672-4fe46badc2fe
+md"# 3. Baseline correction"
+
+# ╔═╡ 32847b32-9bcf-4f95-88ef-bf9105f793b8
+begin
+	bslInterval = [-0.2,0]
+	
+	effAllBsl = DataFrame()
+	
+	effAllChan = groupby(effAll,:channel)
+	for i in 1:size(effAllChan,1)
+	splitT = findall(effAllChan[i].time.==-1)
+	times = effAllChan[i].time[splitT[1]:splitT[2]-1]
+	rangeT = findfirst(times .>= bslInterval[1]):findlast(times .<= bslInterval[2])
+	for j in splitT[1:end]
+		effAllChan[i].yhat[rangeT.+j.-1]=effAllChan[i].yhat[rangeT.+j.-1].-mean(effAllChan[i].yhat[rangeT.+j.-1])
+	end
+	append!(effAllBsl,effAllChan[i])
+	end
+end
+
+# ╔═╡ ca6a9d5a-dfd9-4e51-b540-f7cdfb0e376e
+md"# 4. Grand average"
+
+# ╔═╡ 25d3d8e1-6b21-46f0-858c-5b465b7d2a06
+GA = @chain resultsAll begin
+	@subset(:channel .== 26)
+	@by([:basisname,:coefname,:time],:estimate=mean(:estimate))
+end;
+
+# ╔═╡ 5198b9e8-2bbf-438d-97b9-4ada6982f708
+effGA = @chain effAllBsl begin
+	@subset(:channel .== 26)
+	@by([:basisname,:trial_type,:response_time,:time],:yhat=mean(:yhat))
+end;
+
+# ╔═╡ 6c2fbcd2-3413-4a59-971a-8bd12916de51
+md"# 5. Statistics"
+
+# ╔═╡ a1b954ea-5909-47eb-aa1a-fcf06486e71b
 begin
 	channels = [1:31;33:53;55:56;58:63] # only EEG channels
-	coi = 26 # Channel of interest
+	coi = 26 # Channel of interest for bootstrap: Pz
 end;
 
-# ╔═╡ 8e951e34-f422-40f3-8cdf-638d1c4d446f
-md"### 2.1 Find peaks"
+# ╔═╡ 26906666-db4c-4efc-9367-a823393bb293
+begin
+	effAllSub = groupby(effAll,[:subject,:response_time])
 
-# ╔═╡ 371f4f18-2539-44df-888a-a8cb28132671
+	# Careful: The keys don't always display the full RT. Have to look at the wanted RT by it's group index to be able to actually index the group sometimes: keys(effAllSub)[ix] 
+	keys(effAllSub)
+end;
+
+# ╔═╡ 56173770-94d4-4c00-913f-101378fc563c
+md"### 5.1 Find peaks"
+
+# ╔═╡ b42c53dd-9477-4bf8-ab78-e35e09019e07
 begin
 	mean_amp_diff_stim = []
 	mean_amp_diff_resp = []
@@ -193,28 +267,29 @@ for i in 1:size(channels,1)
 	evalEstimates_bp_distractorChan = []
 for (ix, subject) in enumerate(subList)
 	# Subset to channel
-	coefChannelOfInterest = groupby(coeftable(mu[ix]),:channel)[channels[i]]
+	coefChannelOfInterest = groupby(effAllSub[(subject = subject, response_time = 0.4)],:channel)[channels[i]]
 	
 	# Grouped dataframe of events
-	events = groupby(coefChannelOfInterest,:coefname);
+	events = groupby(coefChannelOfInterest,[:basisname,:trial_type]);
 
 	# P300 evaluation window stimuli: 300-600 ms
 	evalWinStart_stim = findfirst(x -> x > 0.3, events[1].time)
 	evalWinEnd_stim = findlast(x -> x < 0.6, events[1].time)
 	
 	# P300 evaluation window responses: -50-50 ms
+	meanRTresp = 0.37631
 	evalWinStart_resp = findfirst(x -> x > -0.05, events[1].time)
 	evalWinEnd_resp = findlast(x -> x < 0.05, events[1].time)
 	
 	# Get estimates inside evaluation window for each event
-	evalEstimatesTarget1 = events[(coefname = "target",)].estimate[evalWinStart_stim:evalWinEnd_stim]
-	evalEstimatesDistractor1 = events[(coefname = "distractor",)].estimate[evalWinStart_stim:evalWinEnd_stim]
-	evalEstimatesBPTarget1 = events[(coefname = "bp_target",)].estimate[evalWinStart_resp:evalWinEnd_resp]
-	evalEstimatesBPDistractor1 = events[(coefname = "bp_distractor",)].estimate[evalWinStart_resp:evalWinEnd_resp]
+	evalEstimatesTarget1 = events[(basisname = "stimulus", trial_type = "target")].yhat[evalWinStart_stim:evalWinEnd_stim]
+	evalEstimatesDistractor1 = events[(basisname = "stimulus", trial_type = "distractor")].yhat[evalWinStart_stim:evalWinEnd_stim]
+	evalEstimatesBPTarget1 = events[(basisname = "response", trial_type = "target")].yhat[evalWinStart_resp:evalWinEnd_resp]
+	evalEstimatesBPDistractor1 = events[(basisname = "response", trial_type = "distractor")].yhat[evalWinStart_resp:evalWinEnd_resp]
 
 	# Calculate full difference waves
-	diffStim = events[(coefname = "target",)].estimate .- events[(coefname = "distractor",)].estimate
-	diffResp = events[(coefname = "bp_target",)].estimate .- events[(coefname = "bp_distractor",)].estimate
+	diffStim = events[(basisname = "stimulus", trial_type = "target")].yhat .- events[(basisname = "stimulus", trial_type = "distractor")].yhat
+	diffResp = events[(basisname = "response", trial_type = "target")].yhat .- events[(basisname = "response", trial_type = "distractor")].yhat
 	
 	# Calculate difference waves inside evaluation window
 	evalEstimatesStim = evalEstimatesTarget1 .- evalEstimatesDistractor1
@@ -244,10 +319,10 @@ for (ix, subject) in enumerate(subList)
 	# Winsorized mean of absolute peak and values +-150 ms around it
 	mean_amp_diff_stim1 = mean(winsor(diffStim[ixPeakStim-step:ixPeakStim+step],prop=0.2))
 	mean_amp_diff_resp1 = mean(winsor(diffResp[ixPeakResp-step:ixPeakResp+step],prop=0.2))
-	mean_amp_target1 = mean(winsor(events[(coefname = "target",)].estimate[ixPeakStim-step:ixPeakStim+step],prop=0.2))
-	mean_amp_distractor1 = mean(winsor(events[(coefname = "distractor",)].estimate[ixPeakStim-step:ixPeakStim+step],prop=0.2))
-	mean_amp_bp_target1 = mean(winsor(events[(coefname = "bp_target",)].estimate[ixPeakResp-step:ixPeakResp+step],prop=0.2))
-	mean_amp_bp_distractor1 = mean(winsor(events[(coefname = "bp_distractor",)].estimate[ixPeakResp-step:ixPeakResp+step],prop=0.2))
+	mean_amp_target1 = mean(winsor(events[(basisname = "stimulus", trial_type = "target")].yhat[ixPeakStim-step:ixPeakStim+step],prop=0.2))
+	mean_amp_distractor1 = mean(winsor(events[(basisname = "stimulus", trial_type = "distractor")].yhat[ixPeakStim-step:ixPeakStim+step],prop=0.2))
+	mean_amp_bp_target1 = mean(winsor(events[(basisname = "response", trial_type = "target")].yhat[ixPeakResp-step:ixPeakResp+step],prop=0.2))
+	mean_amp_bp_distractor1 = mean(winsor(events[(basisname = "response", trial_type = "distractor")].yhat[ixPeakResp-step:ixPeakResp+step],prop=0.2))
 
 	# Vectors with difference in peak time for each event and subject
 	if i == coi
@@ -279,80 +354,88 @@ end
 	t_peak_resp = mean(winsor(t_peakResp,prop=0.2))
 end;
 
-# ╔═╡ 22603a5e-fe0a-4804-aeb3-dbc1b78bb482
-md"### 2.2 Bootstrap"
+# ╔═╡ 3a337570-393e-45f3-81f7-7990d71a3991
+md"### 5.2 Bootstrap"
 
-# ╔═╡ 7c333ba8-60d6-4be1-ba71-7747eda58529
-# ( By trimming a vector, the extreme values are discarded, while by winsorizing it the extreme values are replaced by certain percentiles ,i.e. modified.)
+# ╔═╡ d6de0e5a-3006-4b6b-b3c7-9009b9bfe641
+# Bootstrap
 begin
 bootstrapStim = bootstrap(x->mean(winsor(x,prop=0.2)),mean_amp_diff_stim,AntitheticSampling(10000))
 
 bootstrapBP = bootstrap(x->mean(winsor(x,prop=0.2)),mean_amp_diff_resp,AntitheticSampling(10000))
 end;
 
-# ╔═╡ 7b71b918-227b-4db6-8665-df01fc259f06
-md"### 2.3 Confidence intervals"
+# ╔═╡ e6271048-7b6c-4d43-b99b-d4e8e2a05958
+md"### 5.3 Confidence Intervals"
 
-# ╔═╡ b22a312d-df68-4768-84ca-3079255c4ea0
-# (BCa > percentile > standard : https://stats.stackexchange.com/questions/355781/is-it-true-that-the-percentile-bootstrap-should-never-be-used)
-# (BCa bootstrap accounts for asymmetrical/skewed distributions: https://acclab.github.io/bootstrap-confidence-intervals.html)
+# ╔═╡ 0c58839b-a63d-4e43-80c8-bad2f280e903
+# Confidence intervals
 begin
 confintStim = HypothesisTests.confint(bootstrapStim, BCaConfInt(0.95))
-
 confintBP = HypothesisTests.confint(bootstrapBP, BCaConfInt(0.95))
 end;
-# Results are meanCI,lower:2.5%, upper:97.5%
 
-# ╔═╡ e8c84b6b-f3ce-4134-bcaf-917ba8536327
-md"### 2.4 Results: P300 latency & amplitude"
+# ╔═╡ 1130e2fb-e5dc-4c52-b810-aa6b8e8a0e1c
+md"### 5.4 Results: P300 latency & amplitude"
 
-# ╔═╡ 9c234f50-412a-4c24-9db8-48dcaae1998e
+# ╔═╡ 840c12e9-0beb-4629-84b6-3e5240fff0b1
 # Results for statistics of P300 component
 begin
-	statsMUresults = DataFrame(Event_Type=["stimulus","response"],
+	statsOCRTresults = DataFrame(Event_Type=["stimulus","response"],
 		Peak_Latency = [t_peak_stim,t_peak_resp],
 		Std_Peak_Latency = [std(t_peakStim),std(t_peakResp)],
 		Peak_Amplitude = [confintStim[1][1],confintBP[1][1]],
-		Confidence_Interval_95Percent = [(confintStim[1][2],confintStim[1][3]),(confintBP[1][2],confintBP[1][3])])
+		Confidence_Interval_95Percent = [[confintStim[1][2],confintStim[1][3]],[confintBP[1][2],confintBP[1][3]]])
 end
 
-# ╔═╡ 0ec5bb89-7e8a-49c1-89ed-919cc5ac37bc
-md"# 3. Grand average"
+# ╔═╡ 586838f2-b504-4cef-8183-4e043d286080
+md"# 6. Visualize results"
 
-# ╔═╡ eaed15aa-9bf0-4976-bad2-6ee7b00dc189
-muCoefGA = @chain muCoef begin
-	@subset(:channel .== 26)
-	@by([:basisname,:coefname,:time],:estimate=mean(:estimate))
+# ╔═╡ 8eba6299-ad1e-42c6-9d17-2d657492b7f1
+begin
+	effGART = @subset(effGA,:response_time.==0.36)
+	effGAgroups = groupby(effGART,[:basisname,:trial_type])
 end;
 
-# ╔═╡ 9779d431-524e-4208-bdb2-6655a58b6d33
-md"# 4. Visualize results"
+# ╔═╡ c5db5cc0-ff5b-4c68-adf2-4f7c876eea9d
+md"### 6.1 Stimulus-locked rERPs"
 
-# ╔═╡ 1496b83e-04c6-4e90-866c-fe47acdc65df
-# designmatrix(mu[1])
-# modelfit(mu[1])
-# plot(designmatrix(mu[1]))
+# ╔═╡ a4190730-5914-4ec4-9c00-de526c5ef910
+md"### 6.2 Response-locked rERPs"
 
-# ╔═╡ 82898ffd-3ebc-49fd-a989-400a1177eaf4
-plot_results(muCoefGA)
+# ╔═╡ 9dd3f057-b6b0-4da3-abfe-30970b596110
+md"""
+Basis: $(@bind basis_select PlutoUI.Select(unique(GA.basisname)))
+"""
 
-# ╔═╡ a0171142-dab8-4964-9278-6b77c6d64b1a
-resultsSubsets = groupby(muCoefGA,:coefname);
+# ╔═╡ 93564e62-7031-42c7-bca5-edff000e0835
+AlgebraOfGraphics.data(@subset(GA,:basisname.==basis_select))*mapping(:time,:estimate,color=:coefname) *visual(Lines)|>plt->draw(plt,legend=(position=:right,))
 
-# ╔═╡ 6beaf50b-a9be-43ac-9aa1-41cd0dd34e9e
-md"### 4.1 Stimulus-locked rERPs"
+# ╔═╡ 46216606-3e17-443a-8a82-131fb82c8b1a
+md"### 6.3 Nonlinear effect of RT on P3 amplitude"
 
-# ╔═╡ 73f88209-0ecb-490b-b90d-ba1ebb5c5ec8
-let
-	time = resultsSubsets[(coefname = "target",)].time.*1e3
-	targetEstimatesMU = resultsSubsets[(coefname = "target",)].estimate
-	distractorEstimatesMU = resultsSubsets[(coefname = "distractor",)].estimate
-	
-	avg_stim = Figure()
-	#ax_decreaseImageHeight = Axis(avg_stim[1,1]) # change image ratio for plots
-	#ax_decreseImageWidth = Axis(avg_stim[1,4])
-	ax_avg_stim = Axis(avg_stim[2:35,1:3],
-		#title="Mass univariate linear model",
+# ╔═╡ c55e72fd-7e1b-45db-bdd2-fa1f16613a84
+begin
+	# Subset to Pz
+	effAllchIx = @subset(effAllBsl,:channel .== 26);
+	effAllchIx.response_time = effAllchIx.response_time.*1e3
+	effEvents = groupby(effAllchIx,[:basisname,:trial_type])
+end;
+
+# ╔═╡ c5373224-c058-4fd6-9d2e-7e938ea1b71c
+begin
+	set_theme!(backgroundcolor = :white)
+
+	targetsStim = effGAgroups[(basisname = "stimulus", trial_type = "target")].yhat
+	distractorsStim = effGAgroups[(basisname = "stimulus", trial_type = "distractor")].yhat
+
+	time = unique(effEvents[1].time).*1e3
+
+	avg_stim_OCRT = Figure()
+	#ax_decreaseImageHeight = Axis(avg_stim_OCRT[1,1])
+	#ax_decreseImageWidth = Axis(avg_stim_OCRT[1,4])
+	ax_avg_stim_OCRT = Axis(avg_stim_OCRT[2:35,1:3],
+		#title="Generalised additive model",
 		xlabel="Time after stimulus onset [ms]",
 		ylabel="ERP [µV]",
 		topspinevisible = false,
@@ -366,62 +449,64 @@ let
 		yticklabelsize = 65)
 	diff = band!(time,
 		0,
-		targetEstimatesMU.-distractorEstimatesMU,
+		targetsStim.-distractorsStim,
 		color="lightgrey")
-	#peakEval = poly!(Rect(Point2f[((t_peak_stim-0.02)*1e3,-3.5),
-	#	((t_peak_stim-0.02)*1e3,6),
-	#	((t_peak_stim+0.02)*1e3,-3.5),
-	#	((t_peak_stim+0.02)*1e3,6)]),
+	#peakEval = poly!(Rect(Point2f[
+	#	((t_peak_stim-0.1).*1e3,-3.5),
+	#	((t_peak_stim-0.1).*1e3,6),
+	#	((t_peak_stim+0.1).*1e3,-3.5),
+	#	((t_peak_stim+0.1).*1e3,6)]),
 	#	color=RGB{Float64}(0.935013, 0.871795, 0.835493),
 	#	strokecolor=:black,
 	#	strokewidth=1)
 	difference = lines!(time,
-		targetEstimatesMU.-distractorEstimatesMU,
+		targetsStim.-distractorsStim,
 		linewidth = 10,
 		color="darkgrey")
 	targets = lines!(time,
-		targetEstimatesMU,
+		targetsStim,
 		linewidth = 10,
 		color="dodgerblue")
 	distractors = lines!(time,
-		distractorEstimatesMU,
+		distractorsStim,
 		linewidth = 10,
 		color="midnightblue")
+	stimOnset = vlines!(0,color="black",linestyle=:dash,linewidth = 6)
 	# Peak time of individual subject's difference waves
 	#for (ix, subject) in enumerate(subList)
 	#	vlines!(t_peakStim[ix].*1e3,color=:red)
 	#end
-	stimOnset = vlines!(0,color="black",linestyle=:dash,linewidth=6)
-	#axislegend(ax_avg_stim,
-	#	[targets,distractors,difference,peakEval],
-	#	["Target","Distractor","Target - Distractor","Peak"],
-	#	position=:rt,
-	#	labelsize = 45)
+	axislegend(ax_avg_stim_OCRT,
+		[targets,distractors,difference],
+		["Target","Distractor","Target - Distractor"],
+		position=:rt,
+		labelsize=70)
 	xlims!(current_axis(),-200,1e3)
 	ylims!(current_axis(),-3.5,6)
-	ax_avg_stim.xticks = -200:200:1e3
-	ax_avg_stim.yticks = -4:2:6
-	
+	ax_avg_stim_OCRT.xticks = -200:200:1e3
+	ax_avg_stim_OCRT.yticks = -4:2:6
+
 	# Save plot
-	#CairoMakie.save("/home/geiger/2022-MSc_EventDuration/code/analysis/results/plots/UsedInThesis/MU_stim.png",avg_stim,resolution=(1920,1080))
-	CairoMakie.save("/home/geiger/2022-MSc_EventDuration/code/analysis/results/plots/a.png",avg_stim,resolution=(1920,1080))
+	#CairoMakie.save("/home/geiger/2022-MSc_EventDuration/code/analysis/results/plots/UsedInThesis/OCRT_stim.png",avg_stim_OCRT,resolution=(1920,1080))
+	CairoMakie.save("/home/geiger/2022-MSc_EventDuration/code/analysis/results/plots/a.png",avg_stim_OCRT,resolution=(1920,1080))
+	
 	current_figure()
 end
 
-# ╔═╡ b17f2e78-baea-4456-8695-5686db5955dd
-md"### 4.2 Response-locked rERPs"
-
-# ╔═╡ 634b88b1-5168-4498-8dff-d72fb415c7df
+# ╔═╡ bb7cecc7-a951-4e48-8ae6-ec3be0b6ad70
 let
-	time = resultsSubsets[(coefname = "bp_target",)].time.*1e3
-	bp_targetEstimatesMU = resultsSubsets[(coefname = "bp_target",)].estimate
-	bp_distractorEstimatesMU = resultsSubsets[(coefname = "bp_distractor",)].estimate
+	set_theme!(backgroundcolor = :white)
+
+	targetsResp = effGAgroups[(basisname = "response", trial_type = "target")].yhat
+	distractorsResp = effGAgroups[(basisname = "response", trial_type = "distractor")].yhat
 	
-	avg_resp = Figure()
-	#ax_decreaseImageHeight = Axis(avg_resp[1,1])
-	#ax_decreseImageWidth = Axis(avg_resp[1,4])
-	ax_avg_resp = Axis(avg_resp[2:35,1:3],
-		#title="Mass univariate linear model",
+	time = unique(effEvents[1].time).*1e3
+
+	avg_resp_OCRT = Figure()
+	#ax_decreaseImageHeight = Axis(avg_resp_OCRT[1,1])
+	#ax_decreseImageWidth = Axis(avg_resp_OCRT[1,4])
+	ax_avg_resp_OCRT = Axis(avg_resp_OCRT[2:35,1:3],
+		#title="Generalised additive model",
 		xlabel="Time after response [ms]",
 		ylabel="ERP [µV]",
 		topspinevisible = false,
@@ -435,254 +520,399 @@ let
 		yticklabelsize = 65)
 	diff = band!(time,
 		0,
-		bp_targetEstimatesMU.-bp_distractorEstimatesMU,
-		color="lightgrey",
-		transparency=true)
+		targetsResp.-distractorsResp,
+		color="lightgrey")
 	#peakEval = poly!(Rect(Point2f[
-	#	((t_peak_resp-0.2)*1e2,-2.7),
-	#	((t_peak_resp-0.2)*1e2,5),
-	#	((t_peak_resp+0.2)*1e2,-2.7),
-	#	((t_peak_resp+0.2)*1e2,5)]),
+	#	((t_peak_resp-0.02).*1e3,-2.7),
+	#	((t_peak_resp-0.02).*1e3,5),
+	#	((t_peak_resp+0.02).*1e3,-2.7),
+	#	((t_peak_resp+0.02).*1e3,5)]),
 	#	color=RGB{Float64}(0.935013, 0.871795, 0.835493),
 	#	strokecolor=:black,
 	#	strokewidth=1)
-	bp_difference = lines!(time,
-		bp_targetEstimatesMU.-bp_distractorEstimatesMU,
+	difference = lines!(time,
+		targetsResp.-distractorsResp,
 		linewidth = 10,
 		color="darkgrey")
-	bp_targets = lines!(time,
-		bp_targetEstimatesMU,
+	targets = lines!(time,
+		targetsResp,
 		linewidth = 10,
 		color="dodgerblue")
-	bp_distractors = lines!(time,
-		bp_distractorEstimatesMU,
+	distractors = lines!(time,
+		distractorsResp,
 		linewidth = 10,
 		color="midnightblue")
-	response = vlines!(0,color="black",linestyle=:dash,linewidth=6)
+	respOnset = vlines!(0,color="black",linestyle=:dash,linewidth = 6)
 	# Peak time of individual subject's difference waves
 	#for (ix, subject) in enumerate(subList)
-	#	vlines!(t_peakResp[ix].*1e2,color=:red)
+	#	vlines!(t_peakStim[ix].*1e3,color=:red)
 	#end
-	#axislegend(ax_avg_resp,
-	#	[bp_targets,bp_distractors,bp_difference,peakEval],
-	#	["Target","Distractor","Target - Distractor","Peak"],
-	#	position=:rt,
-	#	labelsize = 60)
+	axislegend(ax_avg_resp_OCRT,
+		[targets,distractors,difference],
+		["Target","Distractor","Target - Distractor"],
+		position=:rt,
+		labelsize=70)
 	xlims!(current_axis(),-200,1e3)
 	ylims!(current_axis(),-2.7,5)
-	ax_avg_resp.xticks = -200:200:1e3
-	ax_avg_resp.yticks = -4:2:6
+	ax_avg_resp_OCRT.xticks = -200:200:1e3
+	ax_avg_resp_OCRT.yticks = -4:2:6
 
 	# Save plot
-	#CairoMakie.save("/home/geiger/2022-MSc_EventDuration/code/analysis/results/plots/UsedInThesis/MU_resp.png",avg_resp,resolution=(1920,1080))
-	CairoMakie.save("/home/geiger/2022-MSc_EventDuration/code/analysis/results/plots/a.png",avg_resp,resolution=(1920,1080))
-
+	#CairoMakie.save("/home/geiger/2022-MSc_EventDuration/code/analysis/results/plots/UsedInThesis/OCRT_resp.png",avg_resp_OCRT,resolution=(1920,1080))
+	CairoMakie.save("/home/geiger/2022-MSc_EventDuration/code/analysis/results/plots/a.png",avg_resp_OCRT,resolution=(1920,1080))
+	
 	current_figure()
 end
 
-# ╔═╡ 0a937941-22b6-4785-9a31-099abed931a7
-md"### 4.3 Topoplots"
+# ╔═╡ b62fbcd7-2dea-4a29-87a0-e52f84b9136f
+begin
+	effGAtime = deepcopy(effGA)
+	effGAtime.time = effGAtime.time.*1e3
+	effGAtime.response_time = effGAtime.response_time.*1e3
+end;
 
-# ╔═╡ 6e67e7d2-4e5a-403d-99bb-0daecfd08ed9
+# ╔═╡ 61a66f4c-4563-4868-b69c-35d588d41b23
+md"### 6.4 Topoplots"
+
+# ╔═╡ ede25659-43fe-4216-87c1-408aa363342a
+# There's an error when I try to import Topoplots.jl into this notebook due to SciPy.
+# Therefore I exported the effAll DataFrame and created topoplots with the MU script.
+
+# ╔═╡ a26d602d-047a-4737-97cf-81ce8c1d6da0
+begin
+	CSV.write("/home/geiger/2022-MSc_EventDuration/code/analysis/results/models/GAM_RTeff.csv",effAll)
+end;
+
+# ╔═╡ 184de301-ed07-43d7-b5dd-c0fbab11858f
+md"# 7. Presentation" 
+
+# ╔═╡ a829e636-1bce-4a27-ad84-503b25bfd01d
+steps = [-pi,-0.9pi,-0.8pi,-0.7pi,-0.6pi,-0.5pi,-0.4pi,-0.3pi,-0.2pi,-0.1pi,0pi,0.1pi,0.2pi,0.3pi,0.4pi,0.5pi,0.6pi,0.7pi,0.8pi,0.9pi,pi];
+
+# ╔═╡ fc0ff84a-52aa-4938-bb71-ee6e370aec09
+md"### 7.1 ERP in 3D"
+
+# ╔═╡ c908d980-59db-43ce-a7f8-8a2aef62a78e
+# ERP: 
+#	azimuth = -0.5pi
+# 	elevation = 0
+
+# ERP image:
+#	azimuth = -0.5pi
+# 	elevation = 0.5pi
+
+# Peak amplitude:
+#	azimuth = 0
+# 	elevation = 0
+
+# Normal view:
+#	azimuth = -0.4pi
+# 	elevation = 0.1pi
+
+# ╔═╡ 8faeef31-2a69-4355-9f37-7bda99d985b8
 md"""
-Topography: $(@bind topography html"<select>
-<option value='stimTarget'>Target</option>
-<option value='stimDistractor'>Distractor</option>
-<option value='respTarget'>BP Target</option>
-<option value='respDistractor'>BP Distractor</option>
-</select>")
+Event: $(@bind Event html"<select><option value='stimTarget'>Stimulus: Target</option><option value='stimDistractor'>Stimulus: Distractor</option><option value='respTarget'>Response: Target</option><option value='respDistractor'>Response: Distractor</option></select>")
 """
 
-# ╔═╡ 794dd79b-f8f6-4486-b30e-a8cf31182e9c
+# ╔═╡ 0cc1b827-0169-4fd7-a39a-3300212dc38f
+if Event == "stimTarget"
+	event = (basisname = "stimulus", trial_type = "target")
+elseif Event == "stimDistractor"
+	event = (basisname = "stimulus", trial_type = "distractor")
+elseif Event == "respTarget"
+	event = (basisname = "response", trial_type = "target")
+elseif Event == "respDistractor"
+	event = (basisname = "response", trial_type = "distractor")
+end;
+
+# ╔═╡ 6e2e31f0-d9a3-476a-8569-a62597f2f1d3
+let
+	set_theme!(backgroundcolor = :white)
+
+	if Event == "stimTarget" || Event == "stimDistractor"
+		time = effEvents[event].time[findlast(effEvents[event].time.<t_peak_stim)]
+	elseif Event == "respTarget" || Event == "respDistractor"
+		time = effEvents[event].time[findfirst(effEvents[event].time.>t_peak_resp)]
+	end
+		
+plt = (#AlgebraOfGraphics.data(@subset(effEvents[event],:time.==time)) 
+#* visual(Scatter,markersize = 3) 
+#* mapping(:response_time,:yhat)
+#+
+AlgebraOfGraphics.data(@subset((@chain effEvents[event] begin @by([:basisname,:trial_type,:response_time,:time],:yhat=mean(:yhat))end),:time.==time)) 
+* visual(Lines,linewidth = 10,colormap=:vik) 
+* mapping(:response_time,:yhat,color=:response_time)
+)
+
+RTeff = draw(plt,
+	axis=(aspect=1,
+		xlabel="Response time [ms]",
+		ylabel=@sprintf("ERP %s (%i ms) [µV]",event[2],time.*1e3),
+		topspinevisible = false,
+		rightspinevisible = false,
+		xlabelsize=30,
+		ylabelsize=30,
+		xticklabelsize=25,
+		yticklabelsize=25,
+		xgridvisible = false,
+		ygridvisible = false,
+		#flip_ylabel = true
+		),
+	colorbar=(position=:right,
+		ticklabelsize=25,
+		label="Response time [ms]",
+		labelsize=30))
+
+#CairoMakie.save(@sprintf("/home/geiger/2022-MSc_EventDuration/code/analysis/results/plots/UsedInThesis/RTeffect_%s.png",Event),RTeff,px_per_unit=3)
+current_figure()
+end
+
+# ╔═╡ 067d14ef-df17-4918-af95-bea5c93279f8
 begin
-	if topography == "stimTarget"
-		plot_topo = Float32.(evalEstimates_target)
-		range = [-1.9593783153284439,4.513866579161419]
-	elseif topography == "stimDistractor"
-		plot_topo = Float32.(evalEstimates_distractor)
-		range = [-2.6734145065927994,1.9927498071209968]
-	elseif topography == "respTarget"
-		plot_topo = Float32.(evalEstimates_bp_target)
-		range = [-2.205226035626102,2.509699459224624]
-	elseif topography == "respDistractor"
-		plot_topo = Float32.(evalEstimates_bp_distractor)
-		range = [-1.3587592396215793,1.1014230727251058]
+	set_theme!(backgroundcolor = :white)
+
+	effGAEvents = groupby(effGAtime,[:basisname,:trial_type])
+	time_min = -200
+
+	if Event == "respTarget" || Event == "respDistractor"
+	effGARTs = groupby(effGAEvents[event],:response_time)
+	# AoG mapping an visual
+	mapvis = mapping(:time,:yhat,color=:response_time)*visual(Lines,colormap=:vik)
+	# AoG data
+	RT1erp = AlgebraOfGraphics.data(@subset(effGARTs[1][Not(effGARTs[1].time.<time_min),:],:basisname.=="response"))*mapvis
+	RT2erp = AlgebraOfGraphics.data(@subset(effGARTs[2][Not(effGARTs[2].time.<time_min),:],:basisname.=="response"))*mapvis
+	RT3erp = AlgebraOfGraphics.data(@subset(effGARTs[3][Not(effGARTs[3].time.<time_min),:],:basisname.=="response"))*mapvis
+	RT4erp = AlgebraOfGraphics.data(@subset(effGARTs[4][Not(effGARTs[4].time.<time_min),:],:basisname.=="response"))*mapvis
+	# Plot
+	RTerp = draw(RT1erp+RT2erp+RT3erp+RT4erp,
+			axis=(aspect=1,
+				limits=(-200,1000,-2.3,4.5),
+				xlabel="Time after response [s]",
+				ylabel="ERP [µV]",
+				topspinevisible = false,
+				rightspinevisible = false,
+				xlabelsize=30,
+				ylabelsize=30,
+				xticklabelsize=25,
+				yticklabelsize=25,
+				xgridvisible = false,
+				ygridvisible = false,
+				xticks = -200:200:1000,
+				yticks = -2:2:4,
+			),
+			colorbar=(position=:right,
+				ticklabelsize=25,
+				colormap=:vik,
+				label="Response time [ms]",
+				labelsize=30))
+	else
+	effGARTs = groupby(effGAEvents[event],:response_time)
+	# AoG mapping an visual
+	mapvis = mapping(:time,:yhat,color=:response_time)*visual(Lines,colormap=:vik)
+	# AoG data
+	RT1erp = AlgebraOfGraphics.data(@subset(effGARTs[1][Not(effGARTs[1].time.<time_min),:],:basisname.=="stimulus"))*mapvis
+	RT2erp = AlgebraOfGraphics.data(@subset(effGARTs[2][Not(effGARTs[2].time.<time_min),:],:basisname.=="stimulus"))*mapvis
+	RT3erp = AlgebraOfGraphics.data(@subset(effGARTs[3][Not(effGARTs[3].time.<time_min),:],:basisname.=="stimulus"))*mapvis
+	RT4erp = AlgebraOfGraphics.data(@subset(effGARTs[4][Not(effGARTs[4].time.<time_min),:],:basisname.=="stimulus"))*mapvis
+	# Plot
+	RTerp = draw(RT1erp+RT2erp+RT3erp+RT4erp,
+			axis=(aspect=1,
+				limits=(-200,1000,-4.3,3.5),
+				xlabel="Time after stimulus onset [ms]",
+				ylabel="ERP [µV]",
+				topspinevisible = false,
+				rightspinevisible = false,
+				xlabelsize=30,
+				ylabelsize=30,
+				xticklabelsize=25,
+				yticklabelsize=25,
+				xgridvisible = false,
+				ygridvisible = false,
+				xticks = -200:200:1000,
+				yticks = -4:2:4
+			),
+			colorbar=(position=:right,
+				ticklabelsize=25,
+				colormap=:vik,
+				label="Response time [ms]",
+				labelsize=30))
+	end
+
+	# CairoMakie.save(@sprintf("/home/geiger/2022-MSc_EventDuration/code/analysis/results/plots/RTeffectERP_%s.png",Event),RTerp,px_per_unit=3)
+	current_figure()
+end
+
+# ╔═╡ ca2b3344-b1dd-4836-a1f8-7fd6fcde687c
+Planes = @bind planesStimOnsPeakLat PlutoUI.CheckBox()
+
+# ╔═╡ 5b733e68-9992-48e5-ad84-9be87cf56f5e
+azimuth = @bind azimuth PlutoUI.Slider(steps,show_value=true)
+
+# ╔═╡ 7098086b-f81f-49c6-ab47-eec99b743cbb
+elevation = @bind elevation PlutoUI.Slider(steps,show_value=true)
+
+# ╔═╡ 2fad1170-9846-424f-8a62-43414e6b6f05
+md"### 7.2 ERP image"
+
+# ╔═╡ be2881e9-b5c5-40cf-8d6e-a3517a766654
+md"""
+Zoom: $(@bind Zoom html"<select><option value='yesZoom'>Yes</option><option value='noZoom'>No</option></select>")
+"""
+
+# ╔═╡ 47a47158-800c-4152-854c-c108167f68cc
+begin
+	dataERPim = deepcopy(effGAEvents[event])
+	
+	if event == (basisname = "stimulus", trial_type = "target") || event == (basisname = "stimulus", trial_type = "distractor")
+		t_peak = t_peak_stim.*1e3
+	elseif event == (basisname = "response", trial_type = "target") || event == (basisname = "response", trial_type = "distractor")
+		t_peak = t_peak_resp.*1e3
+	end
+
+	dataERPim = filter(row-> !(row.time.<-200),dataERPim)
+	if Zoom == "yesZoom"
+		dataERPimZoom = filter(row-> !(row.time.<t_peak-10),dataERPim)
+		dataERPimZoom = filter(row-> !(row.time.>t_peak+10),dataERPimZoom)
 	end
 end;
 
-# ╔═╡ 8c2dedf1-72d1-4beb-bf27-b5b1080b4035
-# Have to disable the next cell, bcs deepcopy doesn't seem to work on PyMNE objects. Otherwise the EOG channels would get dropped right after loading the data in 0.2. Simply activate to plot topographies.
-
-# ╔═╡ eed10d4f-7040-4bcb-97d4-09be7f2907b5
-# ╠═╡ disabled = true
-#=╠═╡
-# Channel positions
+# ╔═╡ d87e2d5f-8088-4e44-a920-7f6282ac9baa
 begin
-	raw = deepcopy(EEG_raw[1])
-	# Drop EOG and MISC channels
-	raw.drop_channels(["HEOGR","HEOGL","VEOGU","VEOGL"])
-	# Make montage
-	mon = PyMNE.channels.make_standard_montage("standard_1020")
-	raw.set_montage(mon,match_case=false)
-	pos = PyMNE.channels.make_eeg_layout(get_info(raw)).pos
-	pos = [Point2f(pos[k,1],pos[k,2]) for k in 1:size(pos,1)]
+	dataERPimRT = groupby(dataERPim,:response_time)
+	keys(dataERPimRT)
+	dataERPimRTeff = groupby(dataERPim,:time)
 end;
-  ╠═╡ =#
 
-# ╔═╡ 4549e61c-ab1f-42d2-af48-c1f3e7995c59
-#=╠═╡
+# ╔═╡ 5badf89a-d1d7-4aa8-bd28-ea5b1adfced2
+RT = @bind RTslider PlutoUI.Slider(unique(dataERPim.response_time),show_value=true)
+
+# ╔═╡ 18a56ba5-d135-4319-95da-946dafd4d83c
+Time = @bind effSlider PlutoUI.Slider(unique(dataERPim.time),show_value=true)
+
+# ╔═╡ bf61b9cc-1675-4e86-9b43-d2781b1be8e3
 begin
-	topo = Figure()
-	ax_topo = Axis(topo[1,1])
-	topoplot = eeg_topoplot(plot_topo,
-		raw.ch_names;
-		positions=pos,
-		colormap=:vik,
-		colorrange = range,
-		markersize = 7,
-		enlarge = 1.04,
-		#label_text=true,
-		axis=(aspect=DataAspect(),)
+	set_theme!(backgroundcolor = :black)
+	dfig = Figure()
+	dax = Axis3(dfig[1,1],
+		xlabel = "Time after response [ms]",
+		ylabel = "Response time [ms]",
+		zlabel = "ERP [µV]",
+		elevation = elevation,
+		azimuth = azimuth,
+		#viewmode = :fit
+		xgridcolor = :white,
+		ygridcolor = :white,
+		zgridcolor = :white,
+		xlabelcolor = :white,
+		ylabelcolor = :white,
+		zlabelcolor = :white,
+		xspinecolor_1 = :white,
+		yspinecolor_1 = :white,
+		zspinecolor_1 = :white,
+		xspinecolor_2 = :white,
+		yspinecolor_2 = :white,
+		zspinecolor_2 = :white,
+		xspinecolor_3 = :white,
+		yspinecolor_3 = :white,
+		zspinecolor_3 = :white,
+		xtickcolor = :white,
+		ytickcolor = :white,
+		ztickcolor = :white,
+		xticklabelcolor = :white,
+		yticklabelcolor = :white,
+		zticklabelcolor = :white,
+		)
+
+	if planesStimOnsPeakLat
+	# StimOnset
+	poly!(Rect(Point3f[
+		(0,360,minimum(dataERPim.yhat)),(0,420,minimum(dataERPim.yhat)),(0,360,maximum(dataERPim.yhat)),(0,420,maximum(dataERPim.yhat))]),color=:lightblue,transparency = true,)
+	
+	# P300peakLatency
+	poly!(Rect(Point3f[
+		(t_peak,360,minimum(dataERPim.yhat)),(t_peak,420,minimum(dataERPim.yhat)),(t_peak,360,maximum(dataERPim.yhat)),(t_peak,420,maximum(dataERPim.yhat))]),color=:lightyellow,transparency = true,
 	)
-	#CairoMakie.save(@sprintf("/home/geiger/2022-MSc_EventDuration/code/analysis/results/plots/UsedInThesis/Topo_MU_%s.png",topography),topoplot,px_per_unit=3)
-	current_figure()
-end
-  ╠═╡ =#
-
-# ╔═╡ 63aeeddb-c0b6-4b7d-8340-7eadabad8e90
-md"### 4.4 ERP image"
-
-# ╔═╡ 5b624952-f591-45ea-817a-bf04728c9117
-# Create dataframes with epochs and events for all subjects
-begin
-	data_e_df = DataFrame()
-	eventsListAll = DataFrame()
-	for (ix, subject) in enumerate(subList)
-		eventsListAll = vcat(eventsListAll,eventsList[ix])
-		data_e_df1 = DataFrame(data_e[ix][26,:,:],:auto)
-		data_e_df = hcat(data_e_df,data_e_df1,makeunique=true)
 	end
-end;
+	
+	erp=surface!(dax,
+		dataERPim.time,
+		dataERPim.response_time,
+		dataERPim.yhat,
+		colormap=:vik,
+		#colorrange=5,
+		transparency = true,
+	)
 
-# ╔═╡ cd3715d5-672e-43fa-b29c-d756bf21601c
-md"""
-ERP image: $(@bind ERPimage PlutoUI.Select(unique(eventsListAll.trial_type)))
-"""
+	# RT
+	lines!(dataERPimRT[(response_time = RTslider,)].time,
+		dataERPimRT[(response_time = RTslider,)].response_time,
+		dataERPimRT[(response_time = RTslider,)].yhat,
+		color=:red,
+		linewidth=4)
+	lines!(dataERPimRT[(response_time = RTslider,)].time,
+		dataERPimRT[(response_time = RTslider,)].response_time,
+		repeat([-5],length(dataERPimRT[(response_time = RTslider,)].time)),
+		color=:red,
+		linewidth=3)
 
-# ╔═╡ 18ce388e-7dc3-4ebb-937d-603fe8752707
-# Sort events and epochs for targets according to RT of adjacent buttonpress
-begin
-	if ERPimage == "target" || ERPimage == "distractor"
-		ixEvents = findall(occursin.(ERPimage,eventsListAll.trial_type))[1:2:end]
-	elseif ERPimage == "bp_target" || ERPimage == "bp_distractor"
-		ixEvents = findall(occursin.(ERPimage,eventsListAll.trial_type))[2:2:end]
-	end
-	eventsImage = eventsListAll[ixEvents,:]
-	uniqueRTs = unique(x->eventsImage.response_time[x,:],1:length(eventsImage.response_time))
-	eventsImage = eventsImage[uniqueRTs,:]
-	sortVec = sortperm(eventsImage,:response_time)
-	data_e_eventsImage = data_e_df[:,ixEvents]
-	data_e_eventsImageSorted = data_e_eventsImage[:,sortVec]
-	data_e_eventsImageSorted = Matrix(data_e_eventsImageSorted)
-	eventsImageRTsSorted = eventsImage.response_time[sortVec] 
-end;
-
-# ╔═╡ b72f56e2-51d6-4bc2-a506-e8375391d8e1
-# Get lowest of maximal RTs and highest of minimal RTs of all participants
-# (Otherwise Unfold.effects doesn't work in the next cell)
-begin
-	maxRTAll = []
-	minRTAll = []
-	for i in 1:size(eventsList,1)
-		# Group eventsList by conditions/events
-		eventsList_g = groupby(eventsList[i],:trial_type)
-		# Find lowest maxRT over conditions/events
-		maxRTs = @combine(eventsList_g,:maxRT = maximum(:response_time))
-		maxRTfastestCondition = minimum(maxRTs.maxRT)
-		maxRTAll = vcat(maxRTAll,maxRTfastestCondition)
-		# Find highest minRT over conditions/events
-		minRTs = @combine(eventsList_g,:minRT = minimum(:response_time))
-		minRTslowestCondition = maximum(minRTs.minRT)
-		minRTAll = vcat(minRTAll,minRTslowestCondition)
-	end
-	lowestMaxRT = minimum(maxRTAll)
-	highestMinRT = maximum(minRTAll)
-end;
-
-# ╔═╡ bbbc7d9b-47c9-4a56-adbd-249f2954fa82
-# Remove epochs with very high amplitude
-begin
-	data_ERPimage = deepcopy(data_e_eventsImageSorted)
-	bigAmplitude = []
-	for i = 1:size(data_ERPimage,2)
-		if maximum(data_ERPimage[:,i]) .> 20 || minimum(data_ERPimage[:,i]) .< -20
-			global bigAmplitude = vcat(bigAmplitude,i)
-		end
-	end
-	RT_tooLow = findall(eventsImageRTsSorted .< highestMinRT)
-	RT_tooHigh = findall(eventsImageRTsSorted .> lowestMaxRT)
-	data_ERPimage = data_ERPimage[:,Not(unique(vcat(bigAmplitude,RT_tooLow,RT_tooHigh)))]
-	stimRTs_ERPimage = eventsImageRTsSorted[Not(unique(vcat(bigAmplitude,RT_tooLow,RT_tooHigh)))]
-end;
-
-# ╔═╡ 082fd574-6373-42d9-ad6b-0e0975b595e7
-begin
-	figERPimage = Figure()
-	axERPimage = Axis(figERPimage[1,1],
-		xlabel="Time [s]",
-		ylabel="Trials",
-		title="ERP $ERPimage",
-		titlesize = 50,
-		xlabelsize = 50,
-		ylabelsize = 50,
-		xticklabelsize = 45,
-		yticklabelsize = 45)
-if ERPimage == "target" || ERPimage == "distractor"
-	tstart = findfirst(t .>= -0.1)
-	tend = size(t,1)
-	hm = heatmap!(axERPimage,t[tstart:end],1:size(data_ERPimage,2),data_ERPimage[tstart:end,:],colormap="vikO")
-	lines!(stimRTs_ERPimage,1:1:size(stimRTs_ERPimage,1),color="black",linewidth = 5)
-	axERPimage.xticks = 0:0.2:1
-elseif ERPimage == "bp_target" || ERPimage == "bp_distractor"
-	tstart = findfirst(t .>= -0.5)
-	tend = findlast(t.<= 0.6)
-	hm = heatmap!(axERPimage,t[tstart:tend],1:size(data_ERPimage,2),data_ERPimage[tstart:tend,:],colormap="vikO")
-	axERPimage.xticks = -0.4:0.2:0.6
-end
-	vlines!(0,color="black",linestyle=:dash,linewidth = 5)
-	Colorbar(figERPimage[1,2], hm, label = "[µV]",size=45,labelsize=45,ticklabelsize = 45)
-
-	# Save plot
-	#CairoMakie.save("/home/geiger/2022-MSc_EventDuration/code/analysis/results/plots/ERPimage_MU_Target_noRT.png",figERPimage,resolution=(1920,1080))
-	CairoMakie.save("/home/geiger/2022-MSc_EventDuration/code/analysis/results/plots/a.png",figERPimage,resolution=(1920,1080))
+	# RT effect
+	lines!(dataERPimRTeff[(time = effSlider,)].time,
+		dataERPimRTeff[(time = effSlider,)].response_time,
+		dataERPimRTeff[(time = effSlider,)].yhat,
+		color=:yellow,
+		linewidth=4)
+	lines!(dataERPimRTeff[(time = effSlider,)].time,
+		dataERPimRTeff[(time = effSlider,)].response_time,
+		repeat([-5],length(dataERPimRTeff[(time = effSlider,)].time)),
+		color=:yellow,
+		linewidth=3)
+	
+	Colorbar(dfig[1,2],
+		erp,
+		label="µV",
+		rightspinecolor = :white,
+		tickcolor = :white)
 
 	current_figure()
 end
 
-# Alternative to heatmap: 
-#CairoMakie.image(t,1:size(data_ERPimage,2),data_ERPimage[:,:],colormap="vik")
-
-# Colormaps: 'Makie.available_gradients()' and 'https://docs.juliahub.com/ColorSchemes/EO5fj/3.10.2/basics/'
-
-# ╔═╡ 966530a3-b460-40ee-9ed3-8915103ed556
-# ╠═╡ disabled = true
-#=╠═╡
+# ╔═╡ 6465ad36-cdcc-45fe-be77-c245625777ab
+# ERP image
 begin
-	if topography == "stimDiff"
-		plot_topo = evalEstimatesStimAll
-	elseif topography == "respDiff"
-		plot_topo = evalEstimatesRespAll
-	elseif topography == "stimTarget"
-		plot_topo = evalEstimates_target
-	elseif topography == "stimDistractor"
-		plot_topo = evalEstimates_distractor
-	elseif topography == "respTarget"
-		plot_topo = evalEstimates_bp_target
-	elseif topography == "respDistractor"
-		plot_topo = evalEstimates_bp_distractor
+	set_theme!(backgroundcolor = :white)
+
+	ERPim = Figure()
+	axERPim = Axis(ERPim[1,1],
+		xlabel = "Time after response [ms]",
+		ylabel = "Response time [ms]",
+		title = "ERP image")
+	colrange = (minimum(dataERPim.yhat),maximum(dataERPim.yhat))
+
+	if Zoom == "noZoom"
+		hm = heatmap!(axERPim,
+			dataERPim.time,
+			dataERPim.response_time,
+			dataERPim.yhat,
+			colorrange = colrange,
+			colormap=:vik)
+		#poly!(Rect(Point2f[
+		#	(dataERPim.time[1],minimum(dataERPim.response_time)),
+		#	(dataERPim.time[1],maximum(dataERPim.response_time)),
+		#	(t_peak,minimum(dataERPim.response_time)),
+		#	(t_peak,maximum(dataERPim.response_time))]),
+		#	color=:black)
+	elseif Zoom == "yesZoom"
+		hm = heatmap!(axERPim,
+			dataERPimZoom.time,
+			dataERPimZoom.response_time,
+			dataERPimZoom.yhat,
+			colorrange = colrange,
+			colormap=:vik)
 	end
-end;
-  ╠═╡ =#
+	Colorbar(ERPim[1,2], hm, label = "[µV]") #,size=45,labelsize=45,ticklabelsize = 45)
+
+	current_figure()
+end
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -695,6 +925,7 @@ Colors = "5ae59095-9a9b-59fe-a467-6f913c188581"
 DSP = "717857b8-e6f2-59f4-9121-6e50c889abd2"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 DataFramesMeta = "1313f7d8-7da2-5740-9ea0-a2ca25f37964"
+GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
 HypothesisTests = "09f84164-cd44-5f33-b23f-e6b0d136a0d5"
 MixedModels = "ff71e718-51f3-5ec2-a782-8ffcbfa3c316"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
@@ -704,7 +935,6 @@ PyMNE = "6c5003b2-cbe8-491c-a0d1-70088e6a0fd6"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 StatsModels = "3eaba693-59b7-5ba5-a881-562e759f1c8d"
-TopoPlots = "2bdbdf9c-dbd8-403f-947b-1a4e0dd41a7a"
 Unfold = "181c99d8-e21b-4ff3-b70b-c233eddec679"
 UnfoldMakie = "69a5ce3b-64fb-4f22-ae69-36dd4416af2a"
 XDF = "31bc19ec-0089-417f-990e-a2b5e7515868"
@@ -718,6 +948,7 @@ Colors = "~0.12.8"
 DSP = "~0.7.7"
 DataFrames = "~1.3.4"
 DataFramesMeta = "~0.12.0"
+GLMakie = "~0.6.13"
 HypothesisTests = "~0.10.10"
 MixedModels = "~4.7.1"
 PlutoUI = "~0.7.39"
@@ -725,7 +956,6 @@ PyCall = "~1.94.1"
 PyMNE = "~0.1.2"
 StatsBase = "~0.33.21"
 StatsModels = "~0.6.31"
-TopoPlots = "~0.1.2"
 Unfold = "~0.3.11"
 UnfoldMakie = "~0.1.4"
 XDF = "~0.2.0"
@@ -737,7 +967,7 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.8.0"
 manifest_format = "2.0"
-project_hash = "f7ca9cbfd9d30c4c19f1e84538ee6c1f5df2b9f6"
+project_hash = "43fb12ca8bae8dfd48f4b9df7b0e776f45b966e8"
 
 [[deps.AMD]]
 deps = ["Libdl", "LinearAlgebra", "SparseArrays", "Test"]
@@ -1043,12 +1273,6 @@ version = "1.0.0"
 deps = ["Printf"]
 uuid = "ade2ca70-3891-5945-98fb-dc099432e06a"
 
-[[deps.Delaunay]]
-deps = ["LinearAlgebra", "PyCall", "Random", "SparseArrays", "SpecialFunctions", "Test"]
-git-tree-sha1 = "9cc9c5bdf00057a9c4befa9f73a3bad4363439c8"
-uuid = "07eb4e4e-0c6d-46ef-bc4e-83d5e5d860a9"
-version = "1.2.0"
-
 [[deps.DelimitedFiles]]
 deps = ["Mmap"]
 uuid = "8bb1440f-4735-579b-a4ab-409b98df4dab"
@@ -1064,18 +1288,6 @@ deps = ["Indexing", "Random", "Serialization"]
 git-tree-sha1 = "96dc5c5c8994be519ee3420953c931c55657a3f2"
 uuid = "85a47980-9c8c-11e8-2b9f-f7ca1fa99fb4"
 version = "0.3.24"
-
-[[deps.Dierckx]]
-deps = ["Dierckx_jll"]
-git-tree-sha1 = "633c119fcfddf61fb4c75d77ce3ebab552a44723"
-uuid = "39dd38d3-220a-591b-8e3c-4c3a8c710a94"
-version = "0.5.2"
-
-[[deps.Dierckx_jll]]
-deps = ["Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "Libdl", "Pkg"]
-git-tree-sha1 = "6596b96fe1caff3db36415eeb6e9d3b50bfe40ee"
-uuid = "cd4c43a9-7502-52ba-aa6d-59fb2a88580b"
-version = "0.1.0+0"
 
 [[deps.DiffResults]]
 deps = ["StaticArrays"]
@@ -1252,11 +1464,29 @@ version = "1.0.10+0"
 deps = ["Random"]
 uuid = "9fa8497b-333b-5362-9e8d-4d0656e87820"
 
+[[deps.GLFW]]
+deps = ["GLFW_jll"]
+git-tree-sha1 = "35dbc482f0967d8dceaa7ce007d16f9064072166"
+uuid = "f7f18e0c-5ee9-5ccd-a5bf-e8befd85ed98"
+version = "3.4.1"
+
+[[deps.GLFW_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Libglvnd_jll", "Pkg", "Xorg_libXcursor_jll", "Xorg_libXi_jll", "Xorg_libXinerama_jll", "Xorg_libXrandr_jll"]
+git-tree-sha1 = "d972031d28c8c8d9d7b41a536ad7bb0c2579caca"
+uuid = "0656b61e-2033-5cc2-a64a-77c0f6c09b89"
+version = "3.3.8+0"
+
 [[deps.GLM]]
 deps = ["Distributions", "LinearAlgebra", "Printf", "Reexport", "SparseArrays", "SpecialFunctions", "Statistics", "StatsBase", "StatsFuns", "StatsModels"]
 git-tree-sha1 = "039118892476c2bf045a43b88fcb75ed566000ff"
 uuid = "38e38edf-8417-5370-95a0-9cbb8c7f171a"
 version = "1.8.0"
+
+[[deps.GLMakie]]
+deps = ["ColorTypes", "Colors", "FileIO", "FixedPointNumbers", "FreeTypeAbstraction", "GLFW", "GeometryBasics", "LinearAlgebra", "Makie", "Markdown", "MeshIO", "ModernGL", "Observables", "Printf", "Serialization", "ShaderAbstractions", "StaticArrays"]
+git-tree-sha1 = "b0eaead91cb9fd157f7a164f4c07e463a3291535"
+uuid = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
+version = "0.6.13"
 
 [[deps.GeoInterface]]
 deps = ["Extents"]
@@ -1548,6 +1778,12 @@ git-tree-sha1 = "64613c82a59c120435c067c2b809fc61cf5166ae"
 uuid = "d4300ac3-e22c-5743-9152-c294e39db1e4"
 version = "1.8.7+0"
 
+[[deps.Libglvnd_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg", "Xorg_libX11_jll", "Xorg_libXext_jll"]
+git-tree-sha1 = "7739f837d6447403596a75d19ed01fd08d6f56bf"
+uuid = "7e76a0d4-f3c7-5321-8279-8d96eeed0f29"
+version = "1.3.0+3"
+
 [[deps.Libgpg_error_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "c333716e46366857753e273ce6a69ee0945a6db9"
@@ -1670,6 +1906,12 @@ deps = ["Artifacts", "Libdl"]
 uuid = "c8ffd9c3-330d-5841-b78e-0817d7145fa1"
 version = "2.28.0+0"
 
+[[deps.MeshIO]]
+deps = ["ColorTypes", "FileIO", "GeometryBasics", "Printf"]
+git-tree-sha1 = "8be09d84a2d597c7c0c34d7d604c039c9763e48c"
+uuid = "7269a6da-0436-5bbc-96c2-40638cbb6118"
+version = "0.4.10"
+
 [[deps.Missings]]
 deps = ["DataAPI"]
 git-tree-sha1 = "bf210ce90b6c9eed32d25dbcae1ebc565df2687f"
@@ -1702,6 +1944,12 @@ deps = ["Compat", "ExprTools"]
 git-tree-sha1 = "29714d0a7a8083bba8427a4fbfb00a540c681ce7"
 uuid = "78c3b35d-d492-501b-9361-3d52fe80e533"
 version = "0.7.3"
+
+[[deps.ModernGL]]
+deps = ["Libdl"]
+git-tree-sha1 = "713fd24142921db94e5f7d7961f9ee033c6573d5"
+uuid = "66fc600b-dfda-50eb-8b99-91cfa97b1301"
+version = "1.1.5"
 
 [[deps.MosaicViews]]
 deps = ["MappedArrays", "OffsetArrays", "PaddedViews", "StackViews"]
@@ -1736,12 +1984,6 @@ deps = ["OpenLibm_jll"]
 git-tree-sha1 = "a7c3d1da1189a1c2fe843a3bfa04d18d20eb3211"
 uuid = "77ba4419-2d1f-58cd-9bb1-8ffee604a2e3"
 version = "1.0.1"
-
-[[deps.NearestNeighbors]]
-deps = ["Distances", "StaticArrays"]
-git-tree-sha1 = "440165bf08bc500b8fe4a7be2dc83271a00c0716"
-uuid = "b8a86587-4115-5ab1-83bc-aa920d37bbce"
-version = "0.4.12"
 
 [[deps.Netpbm]]
 deps = ["FileIO", "ImageCore"]
@@ -1855,12 +2097,6 @@ deps = ["Artifacts", "Cairo_jll", "Fontconfig_jll", "FreeType2_jll", "FriBidi_jl
 git-tree-sha1 = "3a121dfbba67c94a5bec9dde613c3d0cbcf3a12b"
 uuid = "36c8627f-9965-5494-a995-c6b170f724f3"
 version = "1.50.3+0"
-
-[[deps.Parameters]]
-deps = ["OrderedCollections", "UnPack"]
-git-tree-sha1 = "34c0e9ad262e5f7fc75b10a9952ca7692cfc5fbe"
-uuid = "d96e819e-fc66-5662-9728-84c9c7592b0a"
-version = "0.12.3"
 
 [[deps.Parsers]]
 deps = ["Dates"]
@@ -2053,18 +2289,6 @@ git-tree-sha1 = "2436b15f376005e8790e318329560dcc67188e84"
 uuid = "7b38b023-a4d7-4c5e-8d43-3f3097f304eb"
 version = "0.3.3"
 
-[[deps.ScatteredInterpolation]]
-deps = ["Combinatorics", "Distances", "LinearAlgebra", "NearestNeighbors"]
-git-tree-sha1 = "0d642a08199bbeccd874b33fe3a1b699d345ca79"
-uuid = "3f865c0f-6dca-5f4d-999b-29fe1e7e3c92"
-version = "0.3.6"
-
-[[deps.SciPy]]
-deps = ["InteractiveUtils", "PyCall"]
-git-tree-sha1 = "851671edd821b975dcaa720d1da1541b4c1951ce"
-uuid = "ebc72ef8-9537-4fb0-b64e-ac76025fed2d"
-version = "0.1.1"
-
 [[deps.Scratch]]
 deps = ["Dates"]
 git-tree-sha1 = "f94f779c94e58bf9ea243e77a37e16d9de9126bd"
@@ -2085,6 +2309,12 @@ deps = ["ConstructionBase", "Future", "MacroTools", "Requires"]
 git-tree-sha1 = "38d88503f695eb0301479bc9b0d4320b378bafe5"
 uuid = "efcf1570-3423-57d1-acb7-fd33fddbac46"
 version = "0.8.2"
+
+[[deps.ShaderAbstractions]]
+deps = ["ColorTypes", "FixedPointNumbers", "GeometryBasics", "LinearAlgebra", "Observables", "StaticArrays", "StructArrays", "Tables"]
+git-tree-sha1 = "6b5bba824b515ec026064d1e7f5d61432e954b71"
+uuid = "65257c39-d410-5151-9873-9b3e5be5013e"
+version = "0.2.9"
 
 [[deps.SharedArrays]]
 deps = ["Distributed", "Mmap", "Random", "Serialization"]
@@ -2249,12 +2479,6 @@ git-tree-sha1 = "464d64b2510a25e6efe410e7edab14fffdc333df"
 uuid = "a759f4b9-e2f1-59dc-863e-4aeb61b1ea8f"
 version = "0.5.20"
 
-[[deps.TopoPlots]]
-deps = ["Delaunay", "Dierckx", "GeometryBasics", "InteractiveUtils", "LinearAlgebra", "Makie", "Parameters", "PyCall", "ScatteredInterpolation", "SciPy", "Statistics"]
-git-tree-sha1 = "c9de2ed6f08bcbab66fa5d55f3f9f9983b4c0757"
-uuid = "2bdbdf9c-dbd8-403f-947b-1a4e0dd41a7a"
-version = "0.1.2"
-
 [[deps.TranscodingStreams]]
 deps = ["Random", "Test"]
 git-tree-sha1 = "216b95ea110b5972db65aa90f88d8d89dcb8851c"
@@ -2275,11 +2499,6 @@ version = "0.8.0"
 [[deps.UUIDs]]
 deps = ["Random", "SHA"]
 uuid = "cf7118a7-6976-5b1a-9a39-7adc72f591a4"
-
-[[deps.UnPack]]
-git-tree-sha1 = "387c1f73762231e86e0c9c5443ce3b4a0a9a0c2b"
-uuid = "3a884ed6-31ef-47d7-9d2a-63182c4928ed"
-version = "1.0.2"
 
 [[deps.Unfold]]
 deps = ["BSplines", "CategoricalArrays", "DSP", "DataFrames", "Distributions", "DocStringExtensions", "Effects", "GLM", "IncompleteLU", "IterativeSolvers", "LinearAlgebra", "Logging", "MLBase", "Missings", "MixedModels", "MixedModelsPermutations", "MixedModelsSim", "PkgBenchmark", "ProgressMeter", "PyMNE", "Random", "RobustModels", "SparseArrays", "StaticArrays", "Statistics", "StatsBase", "StatsFuns", "StatsModels", "Tables", "Test", "TimerOutputs"]
@@ -2349,6 +2568,12 @@ git-tree-sha1 = "4e490d5c960c314f33885790ed410ff3a94ce67e"
 uuid = "0c0b7dd1-d40b-584c-a123-a41640f87eec"
 version = "1.0.9+4"
 
+[[deps.Xorg_libXcursor_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg", "Xorg_libXfixes_jll", "Xorg_libXrender_jll"]
+git-tree-sha1 = "12e0eb3bc634fa2080c1c37fccf56f7c22989afd"
+uuid = "935fb764-8cf2-53bf-bb30-45bb1f8bf724"
+version = "1.2.0+4"
+
 [[deps.Xorg_libXdmcp_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "4fe47bd2247248125c428978740e18a681372dd4"
@@ -2360,6 +2585,30 @@ deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg", "Xorg_libX11_jll"]
 git-tree-sha1 = "b7c0aa8c376b31e4852b360222848637f481f8c3"
 uuid = "1082639a-0dae-5f34-9b06-72781eeb8cb3"
 version = "1.3.4+4"
+
+[[deps.Xorg_libXfixes_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg", "Xorg_libX11_jll"]
+git-tree-sha1 = "0e0dc7431e7a0587559f9294aeec269471c991a4"
+uuid = "d091e8ba-531a-589c-9de9-94069b037ed8"
+version = "5.0.3+4"
+
+[[deps.Xorg_libXi_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg", "Xorg_libXext_jll", "Xorg_libXfixes_jll"]
+git-tree-sha1 = "89b52bc2160aadc84d707093930ef0bffa641246"
+uuid = "a51aa0fd-4e3c-5386-b890-e753decda492"
+version = "1.7.10+4"
+
+[[deps.Xorg_libXinerama_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg", "Xorg_libXext_jll"]
+git-tree-sha1 = "26be8b1c342929259317d8b9f7b53bf2bb73b123"
+uuid = "d1454406-59df-5ea1-beac-c340f2130bc3"
+version = "1.1.4+4"
+
+[[deps.Xorg_libXrandr_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg", "Xorg_libXext_jll", "Xorg_libXrender_jll"]
+git-tree-sha1 = "34cea83cb726fb58f325887bf0612c6b3fb17631"
+uuid = "ec84b674-ba8e-5d96-8ba1-2a689ba10484"
+version = "1.5.2+4"
 
 [[deps.Xorg_libXrender_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg", "Xorg_libX11_jll"]
@@ -2475,46 +2724,63 @@ version = "3.5.0+0"
 # ╠═e35af0f8-2e06-46bf-b861-4a1f01f655f9
 # ╠═edf18493-eb61-4f51-8fb1-528f826f5dfe
 # ╠═75764ab2-cf18-4db1-9b93-a09a077679fa
-# ╟─95d567d3-d5b8-45d1-8024-fac2cb8e7c76
-# ╟─820197fd-6c9d-4566-83af-8f4317c76320
-# ╠═5134854f-9332-4824-9491-5e75b4cdcf60
-# ╟─c22782c2-354e-4eb7-8ce6-cbd80cd0a6a5
-# ╠═dd5f8efd-415f-465b-9131-ed464b5af1ec
-# ╟─942e7c12-5940-4528-bbed-4342fc722708
-# ╠═8f54f219-9a74-4196-86f6-75f1f4e19888
-# ╟─90fe4492-4d9f-4d28-b4cb-f90d465d2bc1
-# ╠═650273a2-5217-4405-9536-9c1feafe8c12
-# ╟─8e951e34-f422-40f3-8cdf-638d1c4d446f
-# ╠═371f4f18-2539-44df-888a-a8cb28132671
-# ╟─22603a5e-fe0a-4804-aeb3-dbc1b78bb482
-# ╠═7c333ba8-60d6-4be1-ba71-7747eda58529
-# ╟─7b71b918-227b-4db6-8665-df01fc259f06
-# ╠═b22a312d-df68-4768-84ca-3079255c4ea0
-# ╟─e8c84b6b-f3ce-4134-bcaf-917ba8536327
-# ╠═9c234f50-412a-4c24-9db8-48dcaae1998e
-# ╟─0ec5bb89-7e8a-49c1-89ed-919cc5ac37bc
-# ╠═eaed15aa-9bf0-4976-bad2-6ee7b00dc189
-# ╟─9779d431-524e-4208-bdb2-6655a58b6d33
-# ╠═1496b83e-04c6-4e90-866c-fe47acdc65df
-# ╠═82898ffd-3ebc-49fd-a989-400a1177eaf4
-# ╠═a0171142-dab8-4964-9278-6b77c6d64b1a
-# ╟─6beaf50b-a9be-43ac-9aa1-41cd0dd34e9e
-# ╠═73f88209-0ecb-490b-b90d-ba1ebb5c5ec8
-# ╟─b17f2e78-baea-4456-8695-5686db5955dd
-# ╠═634b88b1-5168-4498-8dff-d72fb415c7df
-# ╟─0a937941-22b6-4785-9a31-099abed931a7
-# ╟─6e67e7d2-4e5a-403d-99bb-0daecfd08ed9
-# ╟─794dd79b-f8f6-4486-b30e-a8cf31182e9c
-# ╠═8c2dedf1-72d1-4beb-bf27-b5b1080b4035
-# ╠═eed10d4f-7040-4bcb-97d4-09be7f2907b5
-# ╠═4549e61c-ab1f-42d2-af48-c1f3e7995c59
-# ╟─63aeeddb-c0b6-4b7d-8340-7eadabad8e90
-# ╟─cd3715d5-672e-43fa-b29c-d756bf21601c
-# ╠═5b624952-f591-45ea-817a-bf04728c9117
-# ╠═18ce388e-7dc3-4ebb-937d-603fe8752707
-# ╠═b72f56e2-51d6-4bc2-a506-e8375391d8e1
-# ╠═bbbc7d9b-47c9-4a56-adbd-249f2954fa82
-# ╠═082fd574-6373-42d9-ad6b-0e0975b595e7
-# ╟─966530a3-b460-40ee-9ed3-8915103ed556
+# ╟─c5d9548f-8f56-411b-ab9c-afcef6e93590
+# ╟─71ec0643-6513-4d38-b927-7b15833b1f14
+# ╠═f8e06052-68f3-4902-b81a-fd2bd1569c89
+# ╟─f2514060-fc56-41f2-adfb-c09a480b5fce
+# ╠═b265f60b-7b97-4247-ae05-cc273eddda09
+# ╟─9051e873-cb59-4b64-982c-c6a11ff68559
+# ╠═f2530405-2983-468e-9552-263d905fa6c3
+# ╠═7021f81c-aca1-4a08-a432-14c91ec21ea3
+# ╟─44481692-e96c-4594-9672-4fe46badc2fe
+# ╠═32847b32-9bcf-4f95-88ef-bf9105f793b8
+# ╟─ca6a9d5a-dfd9-4e51-b540-f7cdfb0e376e
+# ╠═25d3d8e1-6b21-46f0-858c-5b465b7d2a06
+# ╠═5198b9e8-2bbf-438d-97b9-4ada6982f708
+# ╟─6c2fbcd2-3413-4a59-971a-8bd12916de51
+# ╠═a1b954ea-5909-47eb-aa1a-fcf06486e71b
+# ╠═26906666-db4c-4efc-9367-a823393bb293
+# ╟─56173770-94d4-4c00-913f-101378fc563c
+# ╠═b42c53dd-9477-4bf8-ab78-e35e09019e07
+# ╟─3a337570-393e-45f3-81f7-7990d71a3991
+# ╠═d6de0e5a-3006-4b6b-b3c7-9009b9bfe641
+# ╟─e6271048-7b6c-4d43-b99b-d4e8e2a05958
+# ╠═0c58839b-a63d-4e43-80c8-bad2f280e903
+# ╟─1130e2fb-e5dc-4c52-b810-aa6b8e8a0e1c
+# ╠═840c12e9-0beb-4629-84b6-3e5240fff0b1
+# ╟─586838f2-b504-4cef-8183-4e043d286080
+# ╠═8eba6299-ad1e-42c6-9d17-2d657492b7f1
+# ╟─c5db5cc0-ff5b-4c68-adf2-4f7c876eea9d
+# ╠═c5373224-c058-4fd6-9d2e-7e938ea1b71c
+# ╟─a4190730-5914-4ec4-9c00-de526c5ef910
+# ╠═bb7cecc7-a951-4e48-8ae6-ec3be0b6ad70
+# ╟─9dd3f057-b6b0-4da3-abfe-30970b596110
+# ╠═93564e62-7031-42c7-bca5-edff000e0835
+# ╟─46216606-3e17-443a-8a82-131fb82c8b1a
+# ╟─0cc1b827-0169-4fd7-a39a-3300212dc38f
+# ╠═c55e72fd-7e1b-45db-bdd2-fa1f16613a84
+# ╠═6e2e31f0-d9a3-476a-8569-a62597f2f1d3
+# ╠═b62fbcd7-2dea-4a29-87a0-e52f84b9136f
+# ╠═067d14ef-df17-4918-af95-bea5c93279f8
+# ╟─61a66f4c-4563-4868-b69c-35d588d41b23
+# ╠═ede25659-43fe-4216-87c1-408aa363342a
+# ╠═a26d602d-047a-4737-97cf-81ce8c1d6da0
+# ╟─184de301-ed07-43d7-b5dd-c0fbab11858f
+# ╠═b1b71fee-d7ee-45e7-85a2-8316168cb0bb
+# ╠═d87e2d5f-8088-4e44-a920-7f6282ac9baa
+# ╟─fc0ff84a-52aa-4938-bb71-ee6e370aec09
+# ╠═a829e636-1bce-4a27-ad84-503b25bfd01d
+# ╠═c908d980-59db-43ce-a7f8-8a2aef62a78e
+# ╟─8faeef31-2a69-4355-9f37-7bda99d985b8
+# ╟─ca2b3344-b1dd-4836-a1f8-7fd6fcde687c
+# ╟─5b733e68-9992-48e5-ad84-9be87cf56f5e
+# ╟─7098086b-f81f-49c6-ab47-eec99b743cbb
+# ╟─5badf89a-d1d7-4aa8-bd28-ea5b1adfced2
+# ╟─18a56ba5-d135-4319-95da-946dafd4d83c
+# ╠═bf61b9cc-1675-4e86-9b43-d2781b1be8e3
+# ╠═47a47158-800c-4152-854c-c108167f68cc
+# ╟─2fad1170-9846-424f-8a62-43414e6b6f05
+# ╟─be2881e9-b5c5-40cf-8d6e-a3517a766654
+# ╠═6465ad36-cdcc-45fe-be77-c245625777ab
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002

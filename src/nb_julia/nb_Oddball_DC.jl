@@ -518,21 +518,6 @@ md"### 4.3 Topoplots"
 # ╔═╡ bbbf6573-f932-41a4-82b2-4c00f0576387
 # Have to disable the next cell, bcs deepcopy doesn't seem to work on PyMNE objects. Otherwise the EOG channels would get dropped right after loading the data in 0.2. Simply activate to plot topographies.
 
-# ╔═╡ 8784b190-d872-4e02-bb14-147a17be8b0e
-# ╠═╡ disabled = true
-#=╠═╡
-begin
-	raw = deepcopy(EEG_raw[1])
-	# Drop EOG and MISC channels
-	raw.drop_channels(["HEOGR","HEOGL","VEOGU","VEOGL"])
-	# Make montage
-	mon = PyMNE.channels.make_standard_montage("standard_1020")
-	raw.set_montage(mon,match_case=false)
-	pos = PyMNE.channels.make_eeg_layout(get_info(raw)).pos
-	pos = [Point2f(pos[k,1],pos[k,2]) for k in 1:size(pos,1)]
-end;
-  ╠═╡ =#
-
 # ╔═╡ de576896-bfa3-4c5d-910d-375dff2a43e6
 md"""
 Topography: $(@bind topography html"<select>
@@ -547,39 +532,18 @@ Topography: $(@bind topography html"<select>
 begin
 	if topography == "stimTarget"
 		plot_topo = Float32.(evalEstimates_target)
-		range = [-1.9593783153284439,4.513866579161419]
+		range = [-2.6734145065927994,4.513866579161419]
 	elseif topography == "stimDistractor"
 		plot_topo = Float32.(evalEstimates_distractor)
-		range = [-2.6734145065927994,1.9927498071209968]
+		range = [-2.6734145065927994,4.513866579161419]
 	elseif topography == "respTarget"
 		plot_topo = Float32.(evalEstimates_bp_target)
 		range = [-2.205226035626102,2.509699459224624]
 	elseif topography == "respDistractor"
 		plot_topo = Float32.(evalEstimates_bp_distractor)
-		range = [-1.3587592396215793,1.1014230727251058]
+		range = [-2.205226035626102,2.509699459224624]
 	end
 end;
-
-# ╔═╡ 7a2eea8b-bada-46cd-8adc-5a41f4bb60be
-#=╠═╡
-begin
-	topo = Figure()
-	ax_topo = Axis(topo[1,1])
-	topoplot = eeg_topoplot(plot_topo,
-		raw.ch_names;
-		positions=pos,
-		colormap=:vik,
-		colorrange = range,
-		markersize = 7,
-		enlarge = 1.04,
-		#label_text=true,
-		axis=(aspect=DataAspect(),)
-	)
-
-	#CairoMakie.save(@sprintf("/home/geiger/2022-MSc_EventDuration/code/analysis/results/plots/UsedInThesis/Topo_OC_%s.png",topography),topoplot,px_per_unit=3)
-	current_figure()
-end
-  ╠═╡ =#
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """

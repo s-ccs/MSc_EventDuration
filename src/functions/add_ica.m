@@ -33,7 +33,7 @@ if plot
     pop_viewprops(EEGica, 0,1:55,[],[],[],[],fh) 
     
     %pop_viewprops( EEG, typecomp, chanorcomp, spec_opt, erp_opt, scroll_event, classifier_name, fig)
-    saveas(gcf,fullfile(bad_comps_outdir,'all-comps_topoplot'),'png')
+    %saveas(gcf,fullfile(bad_comps_outdir,'all-comps_topoplot'),'png')
     close(gcf)
     %for Ci = 1:size(EEGica.icawinv,2)
         

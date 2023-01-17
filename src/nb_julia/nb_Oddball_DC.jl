@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.14
+# v0.19.16
 
 using Markdown
 using InteractiveUtils
@@ -596,7 +596,7 @@ XDF = "~0.2.0"
 PLUTO_MANIFEST_TOML_CONTENTS = """
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.8.0"
+julia_version = "1.8.3"
 manifest_format = "2.0"
 project_hash = "f7ca9cbfd9d30c4c19f1e84538ee6c1f5df2b9f6"
 
@@ -1417,9 +1417,9 @@ version = "1.42.0+0"
 
 [[deps.Libiconv_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
-git-tree-sha1 = "42b62845d70a619f063a7da093d995ec8e15e778"
+git-tree-sha1 = "c7cb1f5d892775ba13767a87c7ada0b980ea0a71"
 uuid = "94ce4f54-9a6c-5748-9c1c-f9c7231a4531"
-version = "1.16.1+1"
+version = "1.16.1+2"
 
 [[deps.Libmount_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -2074,7 +2074,7 @@ version = "1.7.0"
 [[deps.Tar]]
 deps = ["ArgTools", "SHA"]
 uuid = "a4e569a6-e804-4fa4-b0f3-eef7a1d5b13e"
-version = "1.10.0"
+version = "1.10.1"
 
 [[deps.TensorCore]]
 deps = ["LinearAlgebra"]
@@ -2366,9 +2366,7 @@ version = "3.5.0+0"
 # ╠═f6cc51ad-8ae9-469a-9f59-0fa3169fe59b
 # ╟─21e58f39-0709-4508-94dd-a79b1d15bc6f
 # ╠═bbbf6573-f932-41a4-82b2-4c00f0576387
-# ╠═8784b190-d872-4e02-bb14-147a17be8b0e
 # ╟─de576896-bfa3-4c5d-910d-375dff2a43e6
 # ╟─d66806f8-d57d-4f7e-9414-2f3971954912
-# ╠═7a2eea8b-bada-46cd-8adc-5a41f4bb60be
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002

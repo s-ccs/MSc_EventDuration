@@ -22,25 +22,26 @@
 close all; clear; clc;
 
 % Start EEGLAB
-addpath '/home/geiger/MATLAB_Add-Ons/Collections/EEGLAB'
+%addpath '/home/geiger/MATLAB_Add-Ons/Collections/EEGLAB'
+addpath '/store/users/skukies/eeglab'
 [ALLEEG, EEG, CURRENTSET, ALLCOM] = eeglab;
 
 % Install plugins
-plugin_askinstall('bva-io','pop_loadbv',1)
-plugin_askinstall('iclabel','pop_iclabel',1)
-plugin_askinstall('clean_rawdata','pop_clean_rawdata',1)
-plugin_askinstall('amica','pop_amica',1)
-plugin_askinstall('firfilt','',1)
-plugin_askinstall('dipfit','',1)
-plugin_askinstall('BIDS-matlab-tools','pop_importbids',1)
-plugin_askinstall('viewprops','pop_prop_extended',1)
+% plugin_askinstall('bva-io','pop_loadbv',1)
+% plugin_askinstall('iclabel','pop_iclabel',1)
+% plugin_askinstall('clean_rawdata','pop_clean_rawdata',1)
+% plugin_askinstall('amica','pop_amica',1)
+% plugin_askinstall('firfilt','',1)
+% plugin_askinstall('dipfit','',1)
+% plugin_askinstall('BIDS-matlab-tools','pop_importbids',1)
+% plugin_askinstall('viewprops','pop_prop_extended',1)
 % Additionally required - installed manually: zapline, unfold
-run('~/unfold/init_unfold.m')
+% run('~/unfold/init_unfold.m')
 
 % Control structures
 cfg = struct();
 cfg.amica = 1; % 0 for infomax. amica works now in reasonable time, no need for infomax
-cfg.recalculate_ica = 1;
+cfg.recalculate_ica = 0;
 cfg.srate = 256; % Downsample to
 cfg.reimport = 1;
 
@@ -53,7 +54,6 @@ addpath './tmp'
 % Subjects
 subjectsOddball  = [4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41];
 subjectsDuration = [1 2 3 4 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 27 28 29 30 31 32 33 34 35 37 38 39 40 41];
-cfg.subjectList = {EEG.subject};
 
 % Call BIDS tool BIDS
 if cfg.reimport
@@ -96,6 +96,7 @@ ALLEEG          = pop_select(ALLEEG, 'nochannel',{'VEOG','HEOG'});
 CURRENTSTUDY    = 1;
 EEG             = ALLEEG;
 CURRENTSET      = 1:length(EEG);
+cfg.subjectList = {EEG.subject};
 
 %% Chanlocs
 for s=1:size(EEG,1)
@@ -115,10 +116,18 @@ end
 %% Remove bad channels
 rng(1) % Fix random
 
-EEG = pop_clean_rawdata( EEG,'FlatlineCriterion',5,'ChannelCriterion',0.8,...
+EEG_cleanChan = pop_clean_rawdata( EEG,'FlatlineCriterion',5,'ChannelCriterion',0.8,...
     'LineNoiseCriterion',4,'Highpass',[0.25 0.75] ,...
     'BurstCriterion','off','WindowCriterion','off','BurstRejection','off',...
     'Distance','Euclidian','WindowCriterionTolerances','off' );
+for s = 1:length(EEG)
+   
+    bad_chan = setdiff({EEG(s).chanlocs.labels}, {EEG_cleanChan(s).chanlocs.labels});
+    tmp_idx = cellfun(@(x) find(strcmp({EEG(s).chanlocs.labels} ,x)), bad_chan);
+    EEG(s) = pop_select(EEG(s), 'nochannel', tmp_idx);
+    
+end
+clear('EEG_cleanChan', 'bad_chan', 'tmp_idx');
 
 %% Rereference using average reference
 EEG = pop_reref( EEG,[],'interpchan',['off']);
@@ -126,11 +135,11 @@ EEG = pop_reref( EEG,[],'interpchan',['off']);
 %% Remove large spikes
 EEG_clean = EEG;
 
-for s = 1:size(EEG,1)
-    winRej = uf_continuousArtifactDetect(EEG(s),'amplitudeThreshold',1000);
-    EEG_clean(s) = eeg_eegrej( EEG(s), winRej );
-    EEG_clean(s).etc.crap_winrej = winRej;
-end
+% for s = 1:size(EEG,1)
+%     winRej = uf_continuousArtifactDetect(EEG(s),'amplitudeThreshold',1000);
+%     EEG_clean(s) = eeg_eegrej( EEG(s), winRej );
+%     EEG_clean(s).etc.crap_winrej = winRej;
+% end
 
 % Compare cleaned data to the original:
 % vis_artifacts(EEG_clean(1),EEG(1));
@@ -201,7 +210,8 @@ end
 
 for s = 1:length(EEG)
     if cfg.amica
-        outdir= char(fullfile(cfg.filepath_out, 'derivatives','ica',cfg.subjectList{s},'amica',filesep));
+        cfg.filepath_out = '/store/data/non-bids/MSc_EventDuration/';
+        outdir= char(fullfile(cfg.filepath_out, 'derivatives','ica_Oddball',cfg.subjectList{s},'amica',filesep));
         mods = loadmodout15(outdir);
         if ~isfield(mods,'A')
             error('no ICA found?')

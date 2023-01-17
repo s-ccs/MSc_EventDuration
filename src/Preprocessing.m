@@ -41,13 +41,13 @@ addpath '/store/users/skukies/eeglab'
 % Control structures
 cfg = struct();
 cfg.amica = 1; % 0 for infomax. amica works now in reasonable time, no need for infomax
-cfg.recalculate_ica = 0;
+cfg.recalculate_ica = 1;
 cfg.srate = 256; % Downsample to
 cfg.reimport = 1;
 
 % Paths
 cfg.filepath_in  = '/store/data/MSc_EventDuration'; % Path to BIDS files
-cfg.filepath_out = '/store/data/non-bids/MSc_EventDuration/bids';
+cfg.filepath_out = '/store/data/non-bids/MSc_EventDuration/RS_replication/bids';
 addpath './functions'
 addpath './tmp'
 
@@ -91,13 +91,13 @@ if cfg.reimport
             ALLEEG = [ALLEEG;EEG];
         end
     end
+    
+    ALLEEG          = pop_select(ALLEEG, 'nochannel',{'VEOG','HEOG'});
+    CURRENTSTUDY    = 1;
+    EEG             = ALLEEG;
+    CURRENTSET      = 1:length(EEG);
+    cfg.subjectList = {EEG.subject};
 end
-ALLEEG          = pop_select(ALLEEG, 'nochannel',{'VEOG','HEOG'});
-CURRENTSTUDY    = 1;
-EEG             = ALLEEG;
-CURRENTSET      = 1:length(EEG);
-cfg.subjectList = {EEG.subject};
-
 %% Chanlocs
 for s=1:size(EEG,1)
     % Loading standard file
@@ -156,6 +156,14 @@ if cfg.recalculate_ica
             subjects = subjectsDuration;
         end
         
+        for s = 1:size(EEG,2)
+            EEG(s).filepath = fullfile(cfg.filepath_out,'derivatives/preprocessed_beforeICA/',cfg.subjectList{s},'eeg');
+            if ~exist(EEG(s).filepath,'dir')
+                mkdir(EEG(s).filepath);
+            end
+        end
+        EEG = pop_saveset(EEG, 'savemode', 'resave');
+        
         for sub = subjects(1:end)
             for i = 1:size(EEG,1)
                 if isequal(EEG_clean(i).subject,sprintf('sub-%03i',sub)) && isequal(EEG_clean(i).task,task)
@@ -176,7 +184,7 @@ if cfg.recalculate_ica
             
             if cfg.amica
                 % Define parameters
-                numprocs    = 1;    % 2 is to use t-mux in a parallel implementation
+                numprocs    = 2;    % 2 is to use t-mux in a parallel implementation
                 max_threads = 1;    % Number of threads
                 num_models  = 1;    % Number of models of mixture ICA
                 max_iter    = 1000; % Max number of learning steps
@@ -188,7 +196,7 @@ if cfg.recalculate_ica
                 ccs_runamica15(double(EEGica.data), ...
                     'num_models',num_models, 'outdir',outdir, ...
                     'numprocs', numprocs, 'max_threads', max_threads, ...
-                    'max_iter',max_iter, 'do_reject', 1, 'pcakeep',size(EEGica.data,1)-1,'tmpdir','/home/geiger/2022-MSc_EventDuration/experiments_matlab/PreProcessing/tmp/');
+                    'max_iter',max_iter, 'do_reject', 1, 'pcakeep',size(EEGica.data,1)-1,'tmpdir','/store/users/skukies/tmp/');
             else
                 % Infomax
                 EEGica = pop_runica(EEGica, 'icatype', 'runica', 'extended', 1, 'pca', size(EEGica.data,1)-1);
@@ -206,11 +214,34 @@ if cfg.recalculate_ica
     end
     error('stop for now and wait for the ICAs :-)')
 end
-%% Load ICA and ICLabel
+%% Reload data if not reimported
+if ~cfg.reimport    
+    for switchTask = 1
+        if switchTask == 1
+            task = 'Oddball';
+            subjects = subjectsOddball;
+        elseif switchTask == 2
+            task = 'Duration';
+            subjects = subjectsDuration;
+        end
+        for i = subjects(1:end)
+            filename = sprintf('sub-%03i_ses-001_task-%s_run-001_eeg.set',i,task);
+            EEG = pop_loadset('filepath',fullfile(cfg.filepath_out,'derivatives/preprocessed_beforeICA/',cfg.subjectList{i},'eeg'),'filename',filename);
+        end
+        
+        ALLEEG = [ALLEEG;EEG];
+    end
+    CURRENTSTUDY    = 1;
+    EEG             = ALLEEG;
+    EEG_clean       = EEG;
+    CURRENTSET      = 1:length(EEG);
+    cfg.subjectList = {EEG.subject};
+end
 
+%% Load ICA and ICLabel
 for s = 1:length(EEG)
     if cfg.amica
-        cfg.filepath_out = '/store/data/non-bids/MSc_EventDuration/';
+        cfg.filepath_out = '/store/data/non-bids/MSc_EventDuration/RS_replication';
         outdir= char(fullfile(cfg.filepath_out, 'derivatives','ica_Oddball',cfg.subjectList{s},'amica',filesep));
         mods = loadmodout15(outdir);
         if ~isfield(mods,'A')

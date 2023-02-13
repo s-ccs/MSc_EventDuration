@@ -1,0 +1,3 @@
+[submodule "lib/unfold"]
+	path = lib/unfold
+	url = git@github.com:unfoldtoolbox/unfold.git

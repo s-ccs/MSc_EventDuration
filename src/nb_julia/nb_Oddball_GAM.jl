@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.14
+# v0.19.22
 
 using Markdown
 using InteractiveUtils
@@ -20,8 +20,7 @@ begin
 	using XDF
 	using DataFrames
 	using DataFramesMeta
-	using Unfold
-	using UnfoldMakie
+
 	using CairoMakie
 	using PlutoUI
 	using AlgebraOfGraphics
@@ -33,7 +32,9 @@ begin
 	using DSP
 	using Printf
 	using PyMNE
-	using PyCall
+	#using PyCall
+	using Unfold
+	using UnfoldMakie
 	using Bootstrap
 	using HypothesisTests
 	#using TopoPlots
@@ -52,6 +53,9 @@ md"# Generalised additive model
 # ╔═╡ 18d9b04e-0d71-4d09-8145-50bfcd125cd2
 md"### 0.1 Import Packages"
 
+# ╔═╡ 0ca46794-3b46-4fc1-84ef-b9be08949118
+
+
 # ╔═╡ d22822f9-6f8d-401f-b7c4-a00b4520a4bb
 TableOfContents()
 
@@ -62,18 +66,24 @@ md"### 0.2 Import Data & Events"
 function loadSub(sub,task)
 	# Load events
 	events = CSV.read(@sprintf("/home/geiger/2022-MSc_EventDuration/code/analysis/results/relevantEvents/%s_finalEvents.csv",sub),DataFrame, delim=",")
-
+	
+	# Change events latency to 250sfreq because of new 
+	events.latency = (events.latency ./ 256) .* 250
+	
 	# Load raw data
 	#raw = PyMNE.io.read_raw_eeglab("/store/data/MSc_EventDuration/sub-"*sub*"/ses-001/eeg/sub-"*sub*"_ses-001_task-"*task*"_run-001_eeg.set")
 	
 	# Load preprocessed data
-	raw = PyMNE.io.read_raw_eeglab("/store/data/MSc_EventDuration/derivatives/preprocessed_Oddball/sub-"*sub*"/eeg/sub-"*sub*"_ses-001_task-"*task*"_run-001_eeg.set",verbose="ERROR")
+	#raw = PyMNE.io.read_raw_eeglab("/store/data/MSc_EventDuration/derivatives/preprocessed_Oddball/sub-"*sub*"/eeg/sub-"*sub*"_ses-001_task-"*task*"_run-001_eeg.set",verbose="ERROR")
+
+	raw = PyMNE.io.read_raw_eeglab("/store/data/MSc_EventDuration/derivatives/RS_replication/preprocessed/sub-"*sub*"/eeg/sub-"*sub*"_ses-001_task-"*task*"_run-001_eeg.set",verbose="ERROR")
 
 	# Get sampling frequency
 	sfreq = raw.info["sfreq"]
+	sfreq = pyconvert(Any, sfreq)
 
 	# Re-reference
-	raw = raw.set_eeg_reference(ref_channels=["P7","P8"])
+	#raw = raw.set_eeg_reference(ref_channels=["P7","P8"])
 
 	# Set correct channel types for EOG channels
 	raw.set_channel_types(Dict("HEOGR"=>"eog","HEOGL"=>"eog","VEOGU"=>"eog","VEOGL"=>"eog"))
@@ -586,11 +596,11 @@ end;
 # ╔═╡ 184de301-ed07-43d7-b5dd-c0fbab11858f
 md"# 7. Presentation" 
 
-# ╔═╡ a829e636-1bce-4a27-ad84-503b25bfd01d
-steps = [-pi,-0.9pi,-0.8pi,-0.7pi,-0.6pi,-0.5pi,-0.4pi,-0.3pi,-0.2pi,-0.1pi,0pi,0.1pi,0.2pi,0.3pi,0.4pi,0.5pi,0.6pi,0.7pi,0.8pi,0.9pi,pi];
-
 # ╔═╡ fc0ff84a-52aa-4938-bb71-ee6e370aec09
 md"### 7.1 ERP in 3D"
+
+# ╔═╡ a829e636-1bce-4a27-ad84-503b25bfd01d
+steps = [-pi,-0.9pi,-0.8pi,-0.7pi,-0.6pi,-0.5pi,-0.4pi,-0.3pi,-0.2pi,-0.1pi,0pi,0.1pi,0.2pi,0.3pi,0.4pi,0.5pi,0.6pi,0.7pi,0.8pi,0.9pi,pi];
 
 # ╔═╡ c908d980-59db-43ce-a7f8-8a2aef62a78e
 # ERP: 
@@ -930,7 +940,6 @@ HypothesisTests = "09f84164-cd44-5f33-b23f-e6b0d136a0d5"
 MixedModels = "ff71e718-51f3-5ec2-a782-8ffcbfa3c316"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
-PyCall = "438e738f-606a-5dbb-bf0a-cddfbfd45ab0"
 PyMNE = "6c5003b2-cbe8-491c-a0d1-70088e6a0fd6"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
@@ -944,18 +953,17 @@ AlgebraOfGraphics = "~0.6.11"
 Bootstrap = "~2.3.3"
 CSV = "~0.10.4"
 CairoMakie = "~0.8.13"
-Colors = "~0.12.8"
-DSP = "~0.7.7"
+Colors = "~0.12.10"
+DSP = "~0.7.8"
 DataFrames = "~1.3.4"
 DataFramesMeta = "~0.12.0"
 GLMakie = "~0.6.13"
-HypothesisTests = "~0.10.10"
-MixedModels = "~4.7.1"
-PlutoUI = "~0.7.39"
-PyCall = "~1.94.1"
+HypothesisTests = "~0.10.11"
+MixedModels = "~4.8.2"
+PlutoUI = "~0.7.50"
 PyMNE = "~0.1.2"
 StatsBase = "~0.33.21"
-StatsModels = "~0.6.31"
+StatsModels = "~0.6.33"
 Unfold = "~0.3.11"
 UnfoldMakie = "~0.1.4"
 XDF = "~0.2.0"
@@ -965,9 +973,9 @@ XDF = "~0.2.0"
 PLUTO_MANIFEST_TOML_CONTENTS = """
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.8.0"
+julia_version = "1.8.3"
 manifest_format = "2.0"
-project_hash = "43fb12ca8bae8dfd48f4b9df7b0e776f45b966e8"
+project_hash = "ed127148478b403a9202609d1abff8302f063c01"
 
 [[deps.AMD]]
 deps = ["Libdl", "LinearAlgebra", "SparseArrays", "Test"]
@@ -1104,7 +1112,7 @@ uuid = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 version = "0.8.13"
 
 [[deps.Cairo_jll]]
-deps = ["Artifacts", "Bzip2_jll", "Fontconfig_jll", "FreeType2_jll", "Glib_jll", "JLLWrappers", "LZO_jll", "Libdl", "Pixman_jll", "Pkg", "Xorg_libXext_jll", "Xorg_libXrender_jll", "Zlib_jll", "libpng_jll"]
+deps = ["Artifacts", "Bzip2_jll", "CompilerSupportLibraries_jll", "Fontconfig_jll", "FreeType2_jll", "Glib_jll", "JLLWrappers", "LZO_jll", "Libdl", "Pixman_jll", "Pkg", "Xorg_libXext_jll", "Xorg_libXrender_jll", "Zlib_jll", "libpng_jll"]
 git-tree-sha1 = "4b859a208b2397a7a623a03449e4636bdb17bcf2"
 uuid = "83423d85-b0ee-5818-9007-b63ccbeb887a"
 version = "1.16.1+1"
@@ -1182,9 +1190,9 @@ version = "0.9.9"
 
 [[deps.Colors]]
 deps = ["ColorTypes", "FixedPointNumbers", "Reexport"]
-git-tree-sha1 = "417b0ed7b8b838aa6ca0a87aadf1bb9eb111ce40"
+git-tree-sha1 = "fc08e5930ee9a4e03f84bfb5211cb54e7769758a"
 uuid = "5ae59095-9a9b-59fe-a467-6f913c188581"
-version = "0.12.8"
+version = "0.12.10"
 
 [[deps.Combinatorics]]
 git-tree-sha1 = "08c8b6831dc00bfea825826be0bc8336fc369860"
@@ -1237,9 +1245,9 @@ version = "4.1.1"
 
 [[deps.DSP]]
 deps = ["Compat", "FFTW", "IterTools", "LinearAlgebra", "Polynomials", "Random", "Reexport", "SpecialFunctions", "Statistics"]
-git-tree-sha1 = "4ba2a190a9d05a36e8c26182eb1ba06cd12c1051"
+git-tree-sha1 = "da8b06f89fce9996443010ef92572b193f8dca1f"
 uuid = "717857b8-e6f2-59f4-9121-6e50c889abd2"
-version = "0.7.7"
+version = "0.7.8"
 
 [[deps.DataAPI]]
 git-tree-sha1 = "fb5f5316dd3fd4c5e7c30a24d50643b73e37cd40"
@@ -1555,9 +1563,9 @@ version = "0.9.4"
 
 [[deps.HypothesisTests]]
 deps = ["Combinatorics", "Distributions", "LinearAlgebra", "Random", "Rmath", "Roots", "Statistics", "StatsBase"]
-git-tree-sha1 = "10b23fc711999d34f6888ab6df4c510def193fd9"
+git-tree-sha1 = "ae3b6964d58df11984d22644ce5546eaf20fe95d"
 uuid = "09f84164-cd44-5f33-b23f-e6b0d136a0d5"
-version = "0.10.10"
+version = "0.10.11"
 
 [[deps.IOCapture]]
 deps = ["Logging", "Random"]
@@ -1792,9 +1800,9 @@ version = "1.42.0+0"
 
 [[deps.Libiconv_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
-git-tree-sha1 = "42b62845d70a619f063a7da093d995ec8e15e778"
+git-tree-sha1 = "c7cb1f5d892775ba13767a87c7ada0b980ea0a71"
 uuid = "94ce4f54-9a6c-5748-9c1c-f9c7231a4531"
-version = "1.16.1+1"
+version = "1.16.1+2"
 
 [[deps.Libmount_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -1838,6 +1846,11 @@ deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "5d494bc6e85c4c9b626ee0cab05daa4085486ab1"
 uuid = "5ced341a-0733-55b8-9ab6-a4889d929147"
 version = "1.9.3+0"
+
+[[deps.MIMEs]]
+git-tree-sha1 = "65f28ad4b594aebe22157d6fac869786a255b7eb"
+uuid = "6c6e2e6c-3030-632d-7369-2d6c69616d65"
+version = "0.1.4"
 
 [[deps.MKL_jll]]
 deps = ["Artifacts", "IntelOpenMP_jll", "JLLWrappers", "LazyArtifacts", "Libdl", "Pkg"]
@@ -1919,10 +1932,10 @@ uuid = "e1d29d7a-bbdc-5cf2-9ac0-f12de2c33e28"
 version = "1.0.2"
 
 [[deps.MixedModels]]
-deps = ["Arrow", "DataAPI", "Distributions", "GLM", "JSON3", "LazyArtifacts", "LinearAlgebra", "Markdown", "NLopt", "PooledArrays", "ProgressMeter", "Random", "SparseArrays", "StaticArrays", "Statistics", "StatsBase", "StatsFuns", "StatsModels", "StructTypes", "Tables"]
-git-tree-sha1 = "eb09b8b591d0c2e551ef68c30810fd3d1bb7c946"
+deps = ["Arrow", "DataAPI", "Distributions", "GLM", "JSON3", "LazyArtifacts", "LinearAlgebra", "Markdown", "NLopt", "PooledArrays", "ProgressMeter", "Random", "SnoopPrecompile", "SparseArrays", "StaticArrays", "Statistics", "StatsAPI", "StatsBase", "StatsFuns", "StatsModels", "StructTypes", "Tables"]
+git-tree-sha1 = "fa0816c673c5da589ab8c7bbbd0b0f358ddca53b"
 uuid = "ff71e718-51f3-5ec2-a782-8ffcbfa3c316"
-version = "4.7.1"
+version = "4.8.2"
 
 [[deps.MixedModelsPermutations]]
 deps = ["BlockDiagonals", "LinearAlgebra", "MixedModels", "Random", "SparseArrays", "StaticArrays", "Statistics", "StatsBase", "StatsModels", "Tables"]
@@ -2134,10 +2147,10 @@ uuid = "995b91a9-d308-5afd-9ec6-746e21dbc043"
 version = "1.3.0"
 
 [[deps.PlutoUI]]
-deps = ["AbstractPlutoDingetjes", "Base64", "ColorTypes", "Dates", "Hyperscript", "HypertextLiteral", "IOCapture", "InteractiveUtils", "JSON", "Logging", "Markdown", "Random", "Reexport", "UUIDs"]
-git-tree-sha1 = "8d1f54886b9037091edf146b517989fc4a09efec"
+deps = ["AbstractPlutoDingetjes", "Base64", "ColorTypes", "Dates", "FixedPointNumbers", "Hyperscript", "HypertextLiteral", "IOCapture", "InteractiveUtils", "JSON", "Logging", "MIMEs", "Markdown", "Random", "Reexport", "URIs", "UUIDs"]
+git-tree-sha1 = "5bb5129fdd62a2bbbe17c2756932259acf467386"
 uuid = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
-version = "0.7.39"
+version = "0.7.50"
 
 [[deps.PolygonOps]]
 git-tree-sha1 = "77b3d3605fc1cd0b42d95eba87dfcd2bf67d5ff6"
@@ -2343,6 +2356,12 @@ git-tree-sha1 = "8fb59825be681d451c246a795117f317ecbcaa28"
 uuid = "45858cf5-a6b0-47a3-bbea-62219f50df47"
 version = "0.1.2"
 
+[[deps.SnoopPrecompile]]
+deps = ["Preferences"]
+git-tree-sha1 = "e760a70afdcd461cf01a575947738d359234665c"
+uuid = "66db9d55-30c0-4569-8b51-7e840670fc0c"
+version = "1.0.3"
+
 [[deps.Sockets]]
 uuid = "6462fe0b-24de-5631-8697-dd941f90decc"
 
@@ -2403,9 +2422,9 @@ version = "0.9.18"
 
 [[deps.StatsModels]]
 deps = ["DataAPI", "DataStructures", "LinearAlgebra", "Printf", "REPL", "ShiftedArrays", "SparseArrays", "StatsBase", "StatsFuns", "Tables"]
-git-tree-sha1 = "f8ba54b202c77622a713e25e7616d618308b34d3"
+git-tree-sha1 = "a5e15f27abd2692ccb61a99e0854dfb7d48017db"
 uuid = "3eaba693-59b7-5ba5-a881-562e759f1c8d"
-version = "0.6.31"
+version = "0.6.33"
 
 [[deps.StructArrays]]
 deps = ["Adapt", "DataAPI", "StaticArrays", "Tables"]
@@ -2443,7 +2462,7 @@ version = "1.7.0"
 [[deps.Tar]]
 deps = ["ArgTools", "SHA"]
 uuid = "a4e569a6-e804-4fa4-b0f3-eef7a1d5b13e"
-version = "1.10.0"
+version = "1.10.1"
 
 [[deps.TensorCore]]
 deps = ["LinearAlgebra"]
@@ -2495,6 +2514,11 @@ deps = ["CodecBzip2", "CodecZlib", "Krylov", "LDLFactorizations", "LinearAlgebra
 git-tree-sha1 = "753c5bd161ca2a64da995a21900bcc177bd7d8e4"
 uuid = "6dd1b50a-3aae-11e9-10b5-ef983d2400fa"
 version = "0.8.0"
+
+[[deps.URIs]]
+git-tree-sha1 = "074f993b0ca030848b897beff716d93aca60f06a"
+uuid = "5c2747f8-b7ea-4ff2-ba2e-563bfd36b1d4"
+version = "1.4.2"
 
 [[deps.UUIDs]]
 deps = ["Random", "SHA"]
@@ -2719,6 +2743,7 @@ version = "3.5.0+0"
 # ╟─0f65f18b-cfc9-4ad5-97a8-eb4dc634fb31
 # ╟─18d9b04e-0d71-4d09-8145-50bfcd125cd2
 # ╠═16b920a4-08d5-11ed-3512-8b6269563ef3
+# ╠═0ca46794-3b46-4fc1-84ef-b9be08949118
 # ╠═d22822f9-6f8d-401f-b7c4-a00b4520a4bb
 # ╟─35004d67-c8cb-417d-9724-3dca1fd6990c
 # ╠═e35af0f8-2e06-46bf-b861-4a1f01f655f9

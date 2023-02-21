@@ -24,7 +24,9 @@ close all; clear; clc;
 % Start EEGLAB
 %addpath '/home/geiger/MATLAB_Add-Ons/Collections/EEGLAB'
 addpath '/store/users/skukies/TonalLang/lib/eeglab'
+addpath './lib/unfold'
 [ALLEEG, EEG, CURRENTSET, ALLCOM] = eeglab;
+run init_unfold
 
 % Install plugins
 % plugin_askinstall('bva-io','pop_loadbv',1)
@@ -40,10 +42,10 @@ addpath '/store/users/skukies/TonalLang/lib/eeglab'
 
 % Control structures
 cfg = struct();
-cfg.amica = 0; % 0 for infomax. amica works now in reasonable time, no need for infomax
-cfg.recalculate_ica = 0;
+cfg.amica = 1; % 0 for infomax. amica works now in reasonable time, no need for infomax
+cfg.recalculate_ica = 1;
 cfg.srate = 250; % Downsample to
-cfg.reimport = 0;
+cfg.reimport = 1;
 
 task = 'Oddball'; % Needed for after ICA if not re-import
 
@@ -55,13 +57,13 @@ addpath './functions'
 addpath './tmp'
 addpath /store/users/skukies/StudentProjects/MSc_EventDuration/lib/zapline-plus
 % Subjects
-subjectsOddball  = [4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41];
+% subjectsOddball  = [5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41];
 % subjectsOddball  = [10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41];
-% subjectsOddball  = [4];
+ subjectsOddball  = [6];
 % subjectsDuration = [1 2 3 4 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 27 28 29 30 31 32 33 34 35 37 38 39 40 41];
 % subjectsOddball  = 4;
 
-% Call BIDS tool BIDS
+%% Call BIDS tool BIDS
 if cfg.reimport
     for switchTask = 1
         if switchTask == 1
@@ -83,7 +85,9 @@ if cfg.reimport
             EEG.session = 1;
             EEG.task = task;
             % Load better events
-            tsv = tdfread(fullfile(cfg.filepath_in,sprintf('sub-%03i/ses-001/eeg/sub-%03i_ses-001_task-%s_run-001_events.tsv',i,i,task)));
+%             tsv = tdfread(fullfile(sprintf('/store/data/MSc_EventDuration/raw/events/sub-%03i_task-%s_events.tsv',i,task)));
+            tsv = tdfread(fullfile(sprintf('/store/data/MSc_EventDuration/sub-%03i/ses-001/eeg/sub-%03i_ses-001_task-%s_run-001_events.tsv',i,i,task)));
+
             EEG.event = struct2table(tsv);
             EEG.event = renamevars(EEG.event,["sample","trial_type"],["latency","type"]); % Rename variables
             EEG.event = struct2table(table2struct(EEG.event)); % Strange but doesn't work otherwise.
@@ -133,8 +137,15 @@ if cfg.reimport
         
         bad_chan = setdiff({EEG(s).chanlocs.labels}, {EEG_cleanChan(s).chanlocs.labels});
         tmp_idx = cellfun(@(x) find(strcmp({EEG(s).chanlocs.labels} ,x)), bad_chan);
+        EEG(s).etc.bad_chan = bad_chan;
         EEG(s) = pop_select(EEG(s), 'nochannel', tmp_idx);
         
+        saveTo = sprintf(fullfile(cfg.filepath_out,'/bad_chan/%s/%s_task-%s_badChan.txt'),cfg.subjectList{s},cfg.subjectList{s},task);
+        try mkdir(fileparts(saveTo));end
+        fileID = fopen(saveTo,'a');
+        
+        fprintf(fileID,bad_chan);
+        fclose(fileID);
     end
     clear('EEG_cleanChan', 'bad_chan', 'tmp_idx');
     
@@ -144,11 +155,11 @@ if cfg.reimport
     %% Remove large spikes
     EEG_clean = EEG;
     
-    % for s = 1:size(EEG,1)
-    %     winRej = uf_continuousArtifactDetect(EEG(s),'amplitudeThreshold',1000);
-    %     EEG_clean(s) = eeg_eegrej( EEG(s), winRej );
-    %     EEG_clean(s).etc.crap_winrej = winRej;
-    % end
+    for s = 1:size(EEG,1)
+        winRej = uf_continuousArtifactDetect(EEG(s),'amplitudeThreshold',1000);
+        EEG_clean(s) = eeg_eegrej( EEG(s), winRej );
+        EEG_clean(s).etc.crap_winrej = winRej;
+    end
     
     % Compare cleaned data to the original:
     % vis_artifacts(EEG_clean(1),EEG(1));
@@ -159,7 +170,7 @@ if cfg.reimport
             mkdir(EEG(s).filepath);
         end
     end
-    EEG = pop_saveset(EEG, 'savemode', 'resave');
+%     EEG = pop_saveset(EEG, 'savemode', 'resave');
 end
 %% Run ICA and flag artifactual components using IClabel
 % If you load the data again, don't forget to run the cfg. bits from above
@@ -263,7 +274,7 @@ if ~cfg.reimport
         end
         for i = subjects(1:end)
             filename = sprintf('sub-%03i_ses-001_task-%s_run-001_eeg.set',i,task);
-            EEG = pop_loadset('filepath',fullfile(cfg.filepath_out,'/preprocessed_beforeICA/',sprintf('/sub-%03i', i),'eeg'),'filename',filename);
+            EEG2 = pop_loadset('filepath',fullfile(cfg.filepath_out,'/preprocessed_beforeICA/',sprintf('/sub-%03i', i),'eeg'),'filename',filename);
         
         
         ALLEEG = [ALLEEG;EEG];
@@ -327,7 +338,7 @@ end
 % reset seed
 rng(1)
 % replace the above rawdata with uf_artifacexcludeASR
-for s=1:size(EEG,1)
+for s=4:size(EEG,1)
     disp(["subject " num2str(s)])
     EEG(s).uf_winrej = uf_continuousArtifactDetectASR(EEG(s),'channel',find({EEG(s).chanlocs.type} == "EEG"),'cutoff',20,'tolerance',1e-5);
     
@@ -348,7 +359,7 @@ EEG = pop_eegfiltnew(EEG, 'locutoff',0.1);
 EEG = eeg_checkset(EEG);
 
 %% Update path
-for s = 1:size(EEG,1)
+for s = 1:size(EEG,2)
     EEG(s).filepath = fullfile(cfg.filepath_out,'/preprocessed/',cfg.subjectList{s},'eeg');
     if ~exist(EEG(s).filepath,'dir')
         mkdir(EEG(s).filepath);

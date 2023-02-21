@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.14
+# v0.19.22
 
 using Markdown
 using InteractiveUtils
@@ -19,15 +19,15 @@ md"### 1. Import Events"
 
 # ╔═╡ ca10ac9c-52e0-11ed-1a2c-11746c721dbf
 begin
-	subList = ["005" "006" "007" "008" "009" "010" "011" "012" "013" "014" "015" "016" "017" "018" "019" "020" "021" "022" "023" "024" "025" "026" "028" "029" "030" "031" "032" "033" "034" "035" "036" "037" "038" "039" "040" "041"]
+	subList = ["005" "007" "008" "009" "010" "011" "012" "013" "014" "015" "016" "017" "018" "019" "020" "021" "022" "023" "024" "025" "026" "028" "029" "030" "031" "032" "033" "034" "035" "036" "037" "038" "039" "040" "041"]
 	task = "Oddball"
-	sfreq = 256
+	sfreq = 250
 end;
 
 # ╔═╡ 40c92775-7e81-4840-9f0d-b390666f89f7
 function loadSub(sub,task)
 	# Load events
-	events = CSV.read("/store/data/MSc_EventDuration/sub-"*sub*"/ses-001/eeg/sub-"*sub*"_ses-001_task-"*task*"_run-001_events.tsv",DataFrame, delim="\t")
+	events = CSV.read("/store/data/MSc_EventDuration/raw/events/sub-"*sub*"_task-"*task*"_events.tsv",DataFrame, delim="\t")
 
 	# Add subject to DataFrame to easily subset when not looking at all subjects
 	events[!,:subject] .= parse.(Int64,sub)
@@ -48,9 +48,12 @@ end;
 # ╔═╡ 4b72308e-fbcc-479d-a41d-f0867dbde2f6
 md"### 2. Adapt Events"
 
+# ╔═╡ 1677217e-d0df-46ec-af81-7c3c98a400a1
+eventsAllList
+
 # ╔═╡ cafb84a1-4abd-47e9-9bb3-ac4402887e25
 begin
-	relevantEvents = CSV.read("/home/geiger/2022-MSc_EventDuration/code/analysis/results/relevantEvents/relevantEventsOddball.csv",DataFrame, delim=",")
+	relevantEvents = CSV.read("/store/data/MSc_EventDuration/derivatives/RS_replication/relevantEventsOddball.csv",DataFrame, delim=",")
 
 	shiftLSLOffset = -0.005
 	sfreq_recording = 1000
@@ -148,13 +151,13 @@ md"### 3. Remove Artefacts"
 
 # ╔═╡ f3bb3c5c-e9a9-4753-be7a-673308a5d21e
 begin
-	for (ix, subject) in enumerate(subList)
-		asr = CSV.read("/store/data/non-bids/MSc_EventDuration/derivatives/ASRcleaning_Oddball/sub-"*subject*"/sub-"*subject*"_desc-ASRCleaningTimes.tsv",DataFrame, delim="\t",header=false)
-
-	for i in 1:size(asr,1)
-		eventsList[ix] = filter(row->!(round(row.latency) ∈ range(start=asr.Column1[i]-sfreq,stop = asr.Column2[i]+sfreq,step=0.1)),eventsList[ix])
-	end
-	end
+#	for (ix, subject) in enumerate(subList)
+#		asr = CSV.read("/store/data/non-bids/MSc_EventDuration/derivatives/ASRcleaning_Oddball/sub-"*subject*"/sub-"*subject*"_desc-ASRCleaningTimes.tsv",DataFrame, delim="\t",header=false)
+#
+#	for i in 1:size(asr,1)
+#		eventsList[ix] = filter(row->!(round(row.latency) ∈ range(start=asr.Column1[i]-sfreq,stop = asr.Column2[i]+sfreq,step=0.1)),eventsList[ix])
+#	end
+#	end
 end
 
 # ╔═╡ 42a282f2-9f44-4318-88bc-a507a016a364
@@ -162,7 +165,7 @@ md"### 4. Export Events"
 
 # ╔═╡ c711e9b0-203a-426f-88a2-b2d38c451d38
 for (ix, subject) in enumerate(subList)
-	CSV.write(@sprintf("/home/geiger/2022-MSc_EventDuration/code/analysis/results/relevantEvents/%s_finalEvents.csv",subject),eventsList[ix])
+	CSV.write(@sprintf("/store/data/MSc_EventDuration/derivatives/RS_replication//relevantEvents/%s_finalEvents.csv",subject),eventsList[ix])
 	println("subject ",subject,":  ",size(eventsList[ix]))
 end
 
@@ -182,7 +185,7 @@ DataFrames = "~1.4.1"
 PLUTO_MANIFEST_TOML_CONTENTS = """
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.8.0"
+julia_version = "1.8.3"
 manifest_format = "2.0"
 project_hash = "0c32d1d2b58aef5f4d9f31d0a5cea5a75f9edfc8"
 
@@ -444,6 +447,7 @@ version = "5.1.1+0"
 # ╠═40c92775-7e81-4840-9f0d-b390666f89f7
 # ╠═716fab00-22c4-4b4b-9473-f026a754b107
 # ╟─4b72308e-fbcc-479d-a41d-f0867dbde2f6
+# ╠═1677217e-d0df-46ec-af81-7c3c98a400a1
 # ╠═cafb84a1-4abd-47e9-9bb3-ac4402887e25
 # ╠═6d975c93-563c-427d-83b6-6a150bf7d0c8
 # ╟─7df3832d-fb65-473e-a822-3c9af3ea004e
